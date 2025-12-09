@@ -137,6 +137,7 @@ pub(crate) mod scheduler;
 pub(crate) mod stream;
 #[cfg(test)]
 pub(crate) mod test;
+pub mod utils;
 pub(crate) mod worker;
 
 pub type CoordUInt = u64;
@@ -151,4 +152,8 @@ pub mod prelude {
     #[cfg(feature = "timestamp")]
     pub use crate::operator::window::{EventTimeWindow, TransactionWindow};
     pub use crate::StreamContext;
+
+    // GPU-related exports
+    #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+    pub use crate::operator::gpu::{GpuBatchStrategy, GpuContext, GpuKernel};
 }

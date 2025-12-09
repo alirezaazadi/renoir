@@ -95,6 +95,9 @@ mod start;
 pub mod window;
 mod zip;
 
+#[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+pub mod gpu;
+
 /// Marker trait that all the types inside a stream should implement.
 pub trait Data: Clone + Send + 'static {}
 impl<T: Clone + Send + 'static> Data for T {}
@@ -553,6 +556,85 @@ where
         F: Fn(Op::Out) -> O + Send + Clone + 'static,
     {
         self.add_operator(|prev| Map::new(prev, f))
+    }
+
+    /// Map the elements of the stream using a GPU kernel.
+    ///
+    /// This operator batches input elements and processes them on the GPU using
+    /// the provided kernel. This is most efficient for computationally intensive
+    /// operations on large amounts of data.
+    ///
+    /// Uses the default batching strategy (fixed size of 1 million items).
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// use renoir::prelude::*;
+    /// use renoir::operator::gpu::{GpuKernel, GpuContext};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyGpuKernel;
+    ///
+    /// impl GpuKernel for MyGpuKernel {
+    ///     type Input = f32;
+    ///     type Output = f32;
+    ///     fn execute(&self, ctx: &GpuContext, inputs: &[f32]) -> Vec<f32> {
+    ///         // GPU implementation
+    ///         todo!()
+    ///     }
+    /// }
+    ///
+    /// let env = StreamContext::new_local();
+    /// let result = env
+    ///     .stream_iter((0..1000).map(|x| x as f32))
+    ///     .map_gpu(MyGpuKernel)
+    ///     .collect_vec();
+    /// ```
+    #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+    pub fn map_gpu<K>(self, kernel: K) -> Stream<impl Operator<Out = K::Output>>
+    where
+        K: gpu::GpuKernel<Input = Op::Out>,
+    {
+        self.map_gpu_with_strategy(kernel, gpu::GpuBatchStrategy::default())
+    }
+
+    /// Map the elements of the stream using a GPU kernel with a custom batching strategy.
+    ///
+    /// This operator batches input elements according to the provided strategy
+    /// and processes them on the GPU using the provided kernel.
+    ///
+    /// ## Batching Strategies
+    ///
+    /// - `GpuBatchStrategy::Fixed(n)`: Flush every n items
+    /// - `GpuBatchStrategy::Timed { max_size, interval }`: Flush on size or timeout
+    /// - `GpuBatchStrategy::Adaptive { min_size, max_size }`: Adaptive sizing based on throughput
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// use renoir::prelude::*;
+    /// use renoir::operator::gpu::{GpuKernel, GpuContext, GpuBatchStrategy};
+    /// use std::time::Duration;
+    ///
+    /// let env = StreamContext::new_local();
+    /// let result = env
+    ///     .stream_iter((0..1000).map(|x| x as f32))
+    ///     .map_gpu_with_strategy(
+    ///         MyGpuKernel,
+    ///         GpuBatchStrategy::timed(100_000, Duration::from_millis(100))
+    ///     )
+    ///     .collect_vec();
+    /// ```
+    #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+    pub fn map_gpu_with_strategy<K>(
+        self,
+        kernel: K,
+        strategy: gpu::GpuBatchStrategy,
+    ) -> Stream<impl Operator<Out = K::Output>>
+    where
+        K: gpu::GpuKernel<Input = Op::Out>,
+    {
+        self.add_operator(|prev| gpu::MapGpu::with_strategy(prev, kernel, strategy))
     }
 
     /// Map the elements of the stream into new elements by evaluating a future for each one.
