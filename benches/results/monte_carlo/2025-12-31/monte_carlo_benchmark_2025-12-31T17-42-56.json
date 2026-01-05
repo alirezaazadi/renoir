@@ -1,0 +1,66 @@
+{
+  "benchmark_type": "monte_carlo",
+  "start_time": "2025-12-31T17:42:56.049031+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 12,
+    "ram_gb": 32.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M2 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 1,
+    "gpu_batch_size": 100000
+  },
+  "monte_carlo_config": {
+    "num_paths": 1000,
+    "time_steps": 50,
+    "flops_per_option": 1000000.0
+  },
+  "total_tests": 3,
+  "cpu_workers": 12,
+  "batch_size": 100000,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2025-12-31T17:43:03.443188+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "cpu_total_time_s": 6.429130709,
+      "renoir_total_time_s": 0.836274459,
+      "gpu_total_time_s": 0.128035833,
+      "speedup": 50.213526622660396,
+      "speedup_parallel": 6.531565729728177,
+      "cpu_gflops": 1.5554202352739879,
+      "renoir_gflops": 11.957796740507652,
+      "gpu_gflops": 78.10313539335509,
+      "cpu_workers": 12,
+      "batch_size": 100000,
+      "validation_passed": false,
+      "validation_max_error": 23.860660552978516,
+      "validation_avg_error": 0.2350646133502345,
+      "validation_sample_size": 939
+    },
+    {
+      "test_id": 2,
+      "timestamp": "2025-12-31T17:44:16.112950+00:00",
+      "items_count": 100000,
+      "data_size_gb": 0.001862645149230957,
+      "cpu_total_time_s": 64.09981475,
+      "renoir_total_time_s": 7.927538125,
+      "gpu_total_time_s": 0.164163083,
+      "speedup": 390.46424798198996,
+      "speedup_parallel": 48.290626492437404,
+      "cpu_gflops": 1.5600669111138112,
+      "renoir_gflops": 12.614256585489459,
+      "gpu_gflops": 609.1503532496403,
+      "cpu_workers": 12,
+      "batch_size": 100000,
+      "validation_passed": false,
+      "validation_max_error": 23.860660552978516,
+      "validation_avg_error": 0.2350646133502345,
+      "validation_sample_size": 939
+    }
+  ]
+}

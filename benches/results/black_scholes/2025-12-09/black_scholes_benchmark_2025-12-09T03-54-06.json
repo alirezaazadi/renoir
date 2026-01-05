@@ -1,0 +1,768 @@
+{
+  "timestamp": "2025-12-09T03:54:06.083887+00:00",
+  "platform": "macos aarch64 WGPU",
+  "gpu_batch_size": 10000000,
+  "test_sizes": [
+    10000,
+    25000,
+    50000,
+    75000,
+    100000,
+    250000,
+    500000,
+    750000,
+    1000000,
+    2500000,
+    5000000,
+    7500000,
+    10000000,
+    20000000,
+    25000000,
+    50000000,
+    70000000,
+    75000000,
+    100000000,
+    250000000,
+    500000000,
+    750000000,
+    1000000000
+  ],
+  "results": [
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 10000,
+      "duration_ms": 1.028375,
+      "throughput_mops": 9.724079251245897,
+      "num_workers": 1,
+      "output_count": 10000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 10000,
+      "duration_ms": 0.6199169999999999,
+      "throughput_mops": 16.131191756315765,
+      "num_workers": 12,
+      "output_count": 10000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 10000,
+      "duration_ms": 33.907624999999996,
+      "throughput_mops": 0.29491891573060636,
+      "num_workers": 1,
+      "output_count": 10000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 10000,
+      "duration_ms": 14.824209,
+      "throughput_mops": 0.6745722486778216,
+      "num_workers": 12,
+      "output_count": 10000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 25000,
+      "duration_ms": 2.309917,
+      "throughput_mops": 10.82289969726185,
+      "num_workers": 1,
+      "output_count": 25000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 25000,
+      "duration_ms": 0.67375,
+      "throughput_mops": 37.10575139146568,
+      "num_workers": 12,
+      "output_count": 25000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 25000,
+      "duration_ms": 4.328458,
+      "throughput_mops": 5.775728908539715,
+      "num_workers": 1,
+      "output_count": 25000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 25000,
+      "duration_ms": 14.647458,
+      "throughput_mops": 1.7067807943193967,
+      "num_workers": 12,
+      "output_count": 25000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 50000,
+      "duration_ms": 4.561334,
+      "throughput_mops": 10.961705501066135,
+      "num_workers": 1,
+      "output_count": 50000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 50000,
+      "duration_ms": 1.0063330000000001,
+      "throughput_mops": 49.685342724525576,
+      "num_workers": 12,
+      "output_count": 50000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 50000,
+      "duration_ms": 6.140083,
+      "throughput_mops": 8.143212396314512,
+      "num_workers": 1,
+      "output_count": 50000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 50000,
+      "duration_ms": 13.636833,
+      "throughput_mops": 3.666540464343884,
+      "num_workers": 12,
+      "output_count": 50000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 75000,
+      "duration_ms": 6.886792,
+      "throughput_mops": 10.890411674985973,
+      "num_workers": 1,
+      "output_count": 75000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 75000,
+      "duration_ms": 1.3300409999999998,
+      "throughput_mops": 56.38923912871859,
+      "num_workers": 12,
+      "output_count": 75000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 75000,
+      "duration_ms": 6.185875,
+      "throughput_mops": 12.124396306100593,
+      "num_workers": 1,
+      "output_count": 75000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 75000,
+      "duration_ms": 16.209208999999998,
+      "throughput_mops": 4.626999380413936,
+      "num_workers": 12,
+      "output_count": 75000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 100000,
+      "duration_ms": 9.102374999999999,
+      "throughput_mops": 10.9861437262253,
+      "num_workers": 1,
+      "output_count": 100000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 100000,
+      "duration_ms": 2.0361670000000003,
+      "throughput_mops": 49.11188522355975,
+      "num_workers": 12,
+      "output_count": 100000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 100000,
+      "duration_ms": 7.212292000000001,
+      "throughput_mops": 13.865217880806822,
+      "num_workers": 1,
+      "output_count": 100000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 100000,
+      "duration_ms": 19.994792,
+      "throughput_mops": 5.001302339129109,
+      "num_workers": 12,
+      "output_count": 100000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 250000,
+      "duration_ms": 23.163542,
+      "throughput_mops": 10.79282261754269,
+      "num_workers": 1,
+      "output_count": 250000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 250000,
+      "duration_ms": 3.7637080000000003,
+      "throughput_mops": 66.4238564734565,
+      "num_workers": 12,
+      "output_count": 250000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 250000,
+      "duration_ms": 14.53125,
+      "throughput_mops": 17.204301075268816,
+      "num_workers": 1,
+      "output_count": 250000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 250000,
+      "duration_ms": 28.501708,
+      "throughput_mops": 8.771404155849186,
+      "num_workers": 12,
+      "output_count": 250000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 500000,
+      "duration_ms": 45.402834000000006,
+      "throughput_mops": 11.012528424987742,
+      "num_workers": 1,
+      "output_count": 500000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 500000,
+      "duration_ms": 6.184,
+      "throughput_mops": 80.85381630012937,
+      "num_workers": 12,
+      "output_count": 500000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 500000,
+      "duration_ms": 28.322334,
+      "throughput_mops": 17.653912279969582,
+      "num_workers": 1,
+      "output_count": 500000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 500000,
+      "duration_ms": 31.572333,
+      "throughput_mops": 15.836650398942643,
+      "num_workers": 12,
+      "output_count": 500000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 750000,
+      "duration_ms": 69.90575,
+      "throughput_mops": 10.728731184487685,
+      "num_workers": 1,
+      "output_count": 750000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 750000,
+      "duration_ms": 9.969709,
+      "throughput_mops": 75.22787274934504,
+      "num_workers": 12,
+      "output_count": 750000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 750000,
+      "duration_ms": 41.676416,
+      "throughput_mops": 17.99578927324269,
+      "num_workers": 1,
+      "output_count": 750000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 750000,
+      "duration_ms": 48.97425,
+      "throughput_mops": 15.314170201687622,
+      "num_workers": 12,
+      "output_count": 750000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 1000000,
+      "duration_ms": 91.937542,
+      "throughput_mops": 10.876949483813696,
+      "num_workers": 1,
+      "output_count": 1000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 1000000,
+      "duration_ms": 12.501833,
+      "throughput_mops": 79.98827052001094,
+      "num_workers": 12,
+      "output_count": 1000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 1000000,
+      "duration_ms": 49.379375,
+      "throughput_mops": 20.251370131760474,
+      "num_workers": 1,
+      "output_count": 1000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 1000000,
+      "duration_ms": 54.872459,
+      "throughput_mops": 18.224078494459306,
+      "num_workers": 12,
+      "output_count": 1000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 2500000,
+      "duration_ms": 226.243,
+      "throughput_mops": 11.050065637389885,
+      "num_workers": 1,
+      "output_count": 2500000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 2500000,
+      "duration_ms": 36.082041000000004,
+      "throughput_mops": 69.28654617958003,
+      "num_workers": 12,
+      "output_count": 2500000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 2500000,
+      "duration_ms": 132.277917,
+      "throughput_mops": 18.899602115748465,
+      "num_workers": 1,
+      "output_count": 2500000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 2500000,
+      "duration_ms": 108.655041,
+      "throughput_mops": 23.00859653626195,
+      "num_workers": 12,
+      "output_count": 2500000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 5000000,
+      "duration_ms": 454.339375,
+      "throughput_mops": 11.00498938706336,
+      "num_workers": 1,
+      "output_count": 5000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 5000000,
+      "duration_ms": 65.9465,
+      "throughput_mops": 75.81903512695897,
+      "num_workers": 12,
+      "output_count": 5000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 5000000,
+      "duration_ms": 234.403042,
+      "throughput_mops": 21.330781193530758,
+      "num_workers": 1,
+      "output_count": 5000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 5000000,
+      "duration_ms": 169.539041,
+      "throughput_mops": 29.491732231751858,
+      "num_workers": 12,
+      "output_count": 5000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 7500000,
+      "duration_ms": 682.715834,
+      "throughput_mops": 10.985536919596331,
+      "num_workers": 1,
+      "output_count": 7500000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 7500000,
+      "duration_ms": 111.800917,
+      "throughput_mops": 67.08352848304455,
+      "num_workers": 12,
+      "output_count": 7500000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 7500000,
+      "duration_ms": 364.735542,
+      "throughput_mops": 20.562843859072007,
+      "num_workers": 1,
+      "output_count": 7500000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 7500000,
+      "duration_ms": 348.07237499999997,
+      "throughput_mops": 21.54724286867063,
+      "num_workers": 12,
+      "output_count": 7500000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 10000000,
+      "duration_ms": 909.5950419999999,
+      "throughput_mops": 10.993903372661524,
+      "num_workers": 1,
+      "output_count": 10000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 10000000,
+      "duration_ms": 123.52000000000001,
+      "throughput_mops": 80.95854922279793,
+      "num_workers": 12,
+      "output_count": 10000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 10000000,
+      "duration_ms": 483.39975000000004,
+      "throughput_mops": 20.68681251903833,
+      "num_workers": 1,
+      "output_count": 10000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 10000000,
+      "duration_ms": 400.78666699999997,
+      "throughput_mops": 24.950929817233668,
+      "num_workers": 12,
+      "output_count": 10000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 20000000,
+      "duration_ms": 1819.562167,
+      "throughput_mops": 10.991655224935219,
+      "num_workers": 1,
+      "output_count": 20000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 20000000,
+      "duration_ms": 262.14975000000004,
+      "throughput_mops": 76.29227187895468,
+      "num_workers": 12,
+      "output_count": 20000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 20000000,
+      "duration_ms": 865.573166,
+      "throughput_mops": 23.106076742679427,
+      "num_workers": 1,
+      "output_count": 20000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 20000000,
+      "duration_ms": 834.2552079999999,
+      "throughput_mops": 23.9734793480606,
+      "num_workers": 12,
+      "output_count": 20000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 25000000,
+      "duration_ms": 2271.135291,
+      "throughput_mops": 11.00771059261392,
+      "num_workers": 1,
+      "output_count": 25000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 25000000,
+      "duration_ms": 316.840958,
+      "throughput_mops": 78.90394019071233,
+      "num_workers": 12,
+      "output_count": 25000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 25000000,
+      "duration_ms": 1036.3365840000001,
+      "throughput_mops": 24.123436715421406,
+      "num_workers": 1,
+      "output_count": 25000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 25000000,
+      "duration_ms": 944.717875,
+      "throughput_mops": 26.462926828816485,
+      "num_workers": 12,
+      "output_count": 25000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 50000000,
+      "duration_ms": 4531.884584,
+      "throughput_mops": 11.032937638466567,
+      "num_workers": 1,
+      "output_count": 50000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 50000000,
+      "duration_ms": 639.851459,
+      "throughput_mops": 78.14313665572185,
+      "num_workers": 12,
+      "output_count": 50000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 50000000,
+      "duration_ms": 1897.17075,
+      "throughput_mops": 26.355034200269007,
+      "num_workers": 1,
+      "output_count": 50000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 50000000,
+      "duration_ms": 2438.919292,
+      "throughput_mops": 20.500883388805473,
+      "num_workers": 12,
+      "output_count": 50000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 70000000,
+      "duration_ms": 6352.070917,
+      "throughput_mops": 11.020028100230984,
+      "num_workers": 1,
+      "output_count": 70000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 70000000,
+      "duration_ms": 1084.3267919999998,
+      "throughput_mops": 64.55618409177886,
+      "num_workers": 12,
+      "output_count": 70000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 70000000,
+      "duration_ms": 2684.521958,
+      "throughput_mops": 26.075406010890227,
+      "num_workers": 1,
+      "output_count": 70000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 70000000,
+      "duration_ms": 4715.4202080000005,
+      "throughput_mops": 14.844912417612475,
+      "num_workers": 12,
+      "output_count": 70000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 75000000,
+      "duration_ms": 6924.0686670000005,
+      "throughput_mops": 10.831781660030149,
+      "num_workers": 1,
+      "output_count": 75000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 75000000,
+      "duration_ms": 922.038084,
+      "throughput_mops": 81.34154250400789,
+      "num_workers": 12,
+      "output_count": 75000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 75000000,
+      "duration_ms": 2909.964584,
+      "throughput_mops": 25.77350955141384,
+      "num_workers": 1,
+      "output_count": 75000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 75000000,
+      "duration_ms": 5225.334417,
+      "throughput_mops": 14.353148337453097,
+      "num_workers": 12,
+      "output_count": 75000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 100000000,
+      "duration_ms": 9212.3945,
+      "throughput_mops": 10.854941133925603,
+      "num_workers": 1,
+      "output_count": 100000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 100000000,
+      "duration_ms": 1684.7737920000002,
+      "throughput_mops": 59.35514932321549,
+      "num_workers": 12,
+      "output_count": 100000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 100000000,
+      "duration_ms": 4153.434,
+      "throughput_mops": 24.076462994235612,
+      "num_workers": 1,
+      "output_count": 100000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 100000000,
+      "duration_ms": 7276.557125,
+      "throughput_mops": 13.742762996586796,
+      "num_workers": 12,
+      "output_count": 100000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 250000000,
+      "duration_ms": 22725.094958,
+      "throughput_mops": 11.001054141337772,
+      "num_workers": 1,
+      "output_count": 250000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 250000000,
+      "duration_ms": 3316.060916,
+      "throughput_mops": 75.39065364986196,
+      "num_workers": 12,
+      "output_count": 250000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 250000000,
+      "duration_ms": 9013.75425,
+      "throughput_mops": 27.735391166227988,
+      "num_workers": 1,
+      "output_count": 250000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 250000000,
+      "duration_ms": 17308.930416,
+      "throughput_mops": 14.443411232903532,
+      "num_workers": 12,
+      "output_count": 250000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 500000000,
+      "duration_ms": 45669.062125,
+      "throughput_mops": 10.948330811599737,
+      "num_workers": 1,
+      "output_count": 500000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 500000000,
+      "duration_ms": 6592.954834,
+      "throughput_mops": 75.83852954998113,
+      "num_workers": 12,
+      "output_count": 500000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 500000000,
+      "duration_ms": 17880.906084,
+      "throughput_mops": 27.96278877877473,
+      "num_workers": 1,
+      "output_count": 500000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 500000000,
+      "duration_ms": 32345.103625,
+      "throughput_mops": 15.45829024995124,
+      "num_workers": 12,
+      "output_count": 500000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 750000000,
+      "duration_ms": 68332.992334,
+      "throughput_mops": 10.975664527233464,
+      "num_workers": 1,
+      "output_count": 750000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 750000000,
+      "duration_ms": 9603.525291,
+      "throughput_mops": 78.09632163960322,
+      "num_workers": 12,
+      "output_count": 750000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 750000000,
+      "duration_ms": 26525.439083999998,
+      "throughput_mops": 28.274744015543778,
+      "num_workers": 1,
+      "output_count": 750000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 750000000,
+      "duration_ms": 44015.619041,
+      "throughput_mops": 17.039405927731796,
+      "num_workers": 12,
+      "output_count": 750000000
+    },
+    {
+      "strategy": "cpu_sequential",
+      "num_options": 1000000000,
+      "duration_ms": 90615.08195800001,
+      "throughput_mops": 11.035690509704544,
+      "num_workers": 1,
+      "output_count": 1000000000
+    },
+    {
+      "strategy": "cpu_parallel",
+      "num_options": 1000000000,
+      "duration_ms": 15154.184583999999,
+      "throughput_mops": 65.98837400039419,
+      "num_workers": 12,
+      "output_count": 1000000000
+    },
+    {
+      "strategy": "gpu_sequential",
+      "num_options": 1000000000,
+      "duration_ms": 34967.306291,
+      "throughput_mops": 28.59814226689184,
+      "num_workers": 1,
+      "output_count": 1000000000
+    },
+    {
+      "strategy": "gpu_parallel",
+      "num_options": 1000000000,
+      "duration_ms": 54781.705291,
+      "throughput_mops": 18.254269280008856,
+      "num_workers": 12,
+      "output_count": 1000000000
+    }
+  ]
+}

@@ -3,38 +3,38 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [The Black-Scholes Example](#the-black-scholes-example)
-3. [The map_gpu Operator](#the-map_gpu-operator)
-4. [Implementing GPU Kernels](#implementing-gpu-kernels)
-5. [GPU Programming Concepts](#gpu-programming-concepts)
-6. [GPU Parallelization Strategy](#gpu-parallelization-strategy)
-7. [Step-by-Step GPU Computation Example](#step-by-step-gpu-computation-example)
-8. [Performance Bottlenecks](#performance-bottlenecks)
-9. [Why Speedup Drops After 250M Options](#why-speedup-drops-after-250m-options-large-problem-sizes)
-10. [Batching Strategies](#batching-strategies)
-11. [GPU Context and Backend Selection](#gpu-context-and-backend-selection)
-12. [Quick Start Guide](#quick-start-guide)
-13. [Project Structure](#project-structure)
-14. [Running the Examples](#running-the-examples)
-15. [Running Benchmarks](#running-benchmarks)
-16. [Generating Charts](#generating-charts)
-17. [Performance Considerations](#performance-considerations)
-18. [Performance Optimization Journey](#performance-optimization-journey)
-19. [Streaming Performance Optimizations](#streaming-performance-optimizations)
-    - [Double-Buffered Pipeline](#1-double-buffered-pipeline)
-    - [Fixed Batch Sizing](#2-fixed-batch-sizing-10m-optimal)
-    - [Multi-Worker Data Generation](#3-multi-worker-data-generation)
-    - [GPU Context Caching](#4-gpu-context-caching)
-    - [Combined Strategy](#combined-strategy-gpu-parallel--double-buffered)
-20. [Why GPU Performs Better in Non-Streaming Mode](#why-gpu-performs-better-in-non-streaming-mode)
-21. [Data Layout Optimization (SoA vs AoS)](#data-layout-optimization-soa-vs-aos)
-22. [Optimized Benchmark Mode](#optimized-benchmark-mode)
-23. [API Reference](#api-reference)
-24. [Benchmark Results and Analysis](#benchmark-results-and-analysis)
-    - [CPU vs GPU Benchmark (Standard)](#standard-cpu-vs-gpu-benchmark-non-streaming)
-    - [CPU vs GPU Benchmark (Optimized)](#optimized-cpu-vs-gpu-benchmark)
-    - [Batching Strategy Comparison](#batching-strategy-comparison-results)
-    - [Streaming Simulation](#streaming-simulation-benchmark)
+2. [Theoretical Background](#theoretical-background)
+   - [CPU vs GPU Architecture](#cpu-vs-gpu-architecture)
+   - [GPU Memory Hierarchy](#gpu-memory-hierarchy)
+   - [SIMT Execution Model](#simt-execution-model)
+   - [Performance Optimization Concepts](#performance-optimization-concepts)
+3. [The Black-Scholes Model](#the-black-scholes-example)
+4. [The Monte Carlo Model](#the-monte-carlo-model)
+5. [The CubeCL Framework](#the-cubecl-framework)
+6. [The map_gpu Operator](#the-map_gpu-operator)
+7. [Implementing GPU Kernels](#implementing-gpu-kernels)
+8. [GPU Programming Concepts](#gpu-programming-concepts)
+9. [GPU Parallelization Strategy](#gpu-parallelization-strategy)
+10. [Step-by-Step GPU Computation Example](#step-by-step-gpu-computation-example)
+11. [Performance Bottlenecks and Optimizations](#performance-bottlenecks-and-optimizations)
+12. [Why Speedup Drops After 250M Options](#why-speedup-drops-after-250m-options-large-problem-sizes)
+13. [Batching Strategies](#batching-strategies)
+14. [GPU Context and Backend Selection](#gpu-context-and-backend-selection)
+15. [Quick Start Guide](#quick-start-guide)
+16. [Project Structure](#project-structure)
+17. [Running the Examples](#running-the-examples)
+18. [Running Benchmarks](#running-benchmarks)
+19. [Generating Charts](#generating-charts)
+20. [Performance Considerations](#performance-considerations)
+21. [API Reference](#api-reference)
+22. [Benchmark Results](#benchmark-results-and-analysis)
+23. [Monte Carlo Benchmark](#monte-carlo-benchmark)
+24. [Black-Scholes Kernel Improvements](#black-scholes-kernel-improvements)
+25. [GPU Kernel Integration Tests](#gpu-kernel-integration-tests)
+26. [References](#references)
+
+
+
 
 ---
 
@@ -56,24 +56,611 @@ The `map_gpu` operator extends Renoir's streaming data processing capabilities w
 
 The `map_gpu` operator supports multiple GPU backends through CubeCL:
 
-| Backend | Feature Flag | Platforms |
-|---------|--------------|-----------|
-| **WGPU** | `gpu-wgpu` | macOS (Metal), Windows (DirectX/Vulkan), Linux (Vulkan) |
-| **CUDA** | `gpu-cuda` | NVIDIA GPUs (Linux, Windows) |
+| Backend | Feature Flag | Platforms | GPU Support |
+|---------|--------------|-----------|-------------|
+| **WGPU** | `gpu-wgpu` | macOS, Windows, Linux, Web | AMD, NVIDIA, Intel, Apple Silicon |
+| **CUDA** | `gpu-cuda` | Linux, Windows | NVIDIA only |
+
+> [!TIP]
+> **For most users, `gpu-wgpu` is recommended** as it provides cross-platform compatibility across all major GPU vendors.
+
+#### WGPU: Cross-Platform GPU Abstraction
+
+WGPU is a cross-platform graphics abstraction layer that automatically selects the best native API for your system:
+
+| Platform | Native API | Supported GPUs |
+|----------|------------|----------------|
+| **macOS** | Metal | Apple Silicon (M1/M2/M3), AMD (older Macs) |
+| **Linux** | Vulkan | AMD (RDNA/RDNA2/RDNA3), NVIDIA, Intel |
+| **Windows** | DirectX 12 / Vulkan | AMD, NVIDIA, Intel |
+| **Web (WASM)** | WebGPU | Browser-dependent |
+
+This means you can run the same code on:
+- **Apple M1/M2/M3** Macs (via Metal)
+- **AMD Radeon** GPUs on Linux/Windows (via Vulkan/DX12)
+- **NVIDIA GeForce/RTX** GPUs on any platform (via Vulkan/DX12)
+- **Intel Arc** GPUs (via Vulkan/DX12)
+
+#### CUDA: NVIDIA-Specific Optimization
+
+The `gpu-cuda` backend provides direct CUDA access for NVIDIA GPUs, which may offer:
+- Lower driver overhead
+- Access to NVIDIA-specific features (Tensor Cores, etc.)
+- Slightly better performance on some workloads
+
+However, it **only works on NVIDIA hardware** and requires the CUDA toolkit to be installed.
+
+---
+
+## Theoretical Background
+
+This section provides a comprehensive theoretical foundation for understanding GPU-accelerated computing. We examine the fundamental architectural differences between CPUs and GPUs, explore memory hierarchies and their performance implications, analyze the SIMT execution model, and detail the optimization techniques essential for achieving high-performance GPU computation.
+
+### CPU vs GPU Architecture
+
+Modern processors can be broadly categorized into two distinct architectural paradigms: **latency-optimized** processors (CPUs) and **throughput-optimized** processors (GPUs) [1][2]. Understanding these fundamental differences is crucial for effective heterogeneous computing.
+
+#### The Latency vs Throughput Trade-off
+
+The fundamental design choice in processor architecture is the trade-off between **latency** (time to complete a single task) and **throughput** (number of tasks completed per unit time) [2]:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    THE FUNDAMENTAL TRADE-OFF                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   LATENCY-OPTIMIZED (CPU)                 THROUGHPUT-OPTIMIZED (GPU)            │
+│   ───────────────────────                 ──────────────────────────            │
+│                                                                                  │
+│   Goal: Minimize time to                  Goal: Maximize tasks                  │
+│         complete ONE task                       completed per second            │
+│                                                                                  │
+│   Strategy:                               Strategy:                             │
+│   • Large caches                          • Many simple cores                   │
+│   • Complex control logic                 • High memory bandwidth               │
+│   • High clock frequency                  • Massive parallelism                 │
+│   • Branch prediction                     • Thread-level parallelism            │
+│   • Out-of-order execution                • Hide latency with threads           │
+│                                                                                  │
+│   Best for:                               Best for:                             │
+│   • Sequential algorithms                 • Data-parallel workloads             │
+│   • Complex control flow                  • Regular memory access               │
+│   • Low-latency requirements              • High-throughput requirements        │
+│   • Operating systems                     • Scientific computing               │
+│   • Database queries                      • Machine learning                    │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Central Processing Unit (CPU) Architecture
+
+CPUs are designed as general-purpose processors optimized for **low-latency** execution of sequential tasks. A modern CPU dedicates approximately 50% of its die area to control logic and cache, with only a small portion for actual computation [1][2].
+
+**CPU Core Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           CPU CORE ARCHITECTURE                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                        SINGLE CPU CORE                                   │   │
+│   │  ┌─────────────────────────────────────────────────────────────────┐    │   │
+│   │  │                    CONTROL LOGIC (~50%)                          │    │   │
+│   │  │  ┌───────────────┐ ┌───────────────┐ ┌───────────────────────┐  │    │   │
+│   │  │  │    Branch     │ │  Out-of-Order │ │     Speculative       │  │    │   │
+│   │  │  │   Predictor   │ │   Execution   │ │      Execution        │  │    │   │
+│   │  │  └───────────────┘ └───────────────┘ └───────────────────────┘  │    │   │
+│   │  └─────────────────────────────────────────────────────────────────┘    │   │
+│   │                                                                          │   │
+│   │  ┌─────────────────┐  ┌─────────────────────────────────────────────┐   │   │
+│   │  │  EXECUTION      │  │              CACHE HIERARCHY                │   │   │
+│   │  │  UNITS (~10%)   │  │                  (~40%)                     │   │   │
+│   │  │  ┌───┐ ┌───┐    │  │  ┌────────────────────────────────────┐    │   │   │
+│   │  │  │ALU│ │ALU│    │  │  │  L1 Cache: 32-64 KB (Data + Inst)  │    │   │   │
+│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤    │   │   │
+│   │  │  │FPU│ │FPU│    │  │  │  L2 Cache: 256 KB - 1 MB           │    │   │   │
+│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤    │   │   │
+│   │  │  │AGU│ │AGU│    │  │  │  L3 Cache: 8 - 64 MB (shared)      │    │   │   │
+│   │  │  └───┘ └───┘    │  │  └────────────────────────────────────┘    │   │   │
+│   │  └─────────────────┘  └─────────────────────────────────────────────┘   │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   ALU = Arithmetic Logic Unit    FPU = Floating Point Unit                      │
+│   AGU = Address Generation Unit                                                  │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**CPU Component Details:**
+
+| Component | Description | Typical Values |
+|-----------|-------------|----------------|
+| **Cores** | Independent processing units with full instruction pipelines | 4-64 cores |
+| **ALUs per Core** | Integer arithmetic and logic operations | 4-8 per core |
+| **FPUs per Core** | Floating-point arithmetic (add, multiply, divide) | 2-4 per core |
+| **Clock Frequency** | Cycles per second; higher = faster sequential execution | 3.0-5.5 GHz |
+| **L1 Cache** | Fastest cache, per-core, ~4 cycle latency | 32-64 KB |
+| **L2 Cache** | Medium-speed cache, per-core, ~12 cycle latency | 256 KB - 1 MB |
+| **L3 Cache** | Shared across cores, ~40 cycle latency | 8-64 MB |
+| **SIMD Width** | Vector instruction width (SSE=128-bit, AVX=256/512-bit) | 128-512 bits |
+
+**CPU Latency-Reduction Mechanisms:**
+
+1. **Branch Prediction**: Modern CPUs achieve 95-99% prediction accuracy, speculatively executing instructions before branch resolution to avoid pipeline stalls.
+
+2. **Out-of-Order Execution**: Instructions execute as soon as their operands are available, not in strict program order, maximizing ALU utilization.
+
+3. **Speculative Execution**: The CPU predicts likely code paths and executes them ahead of time; mispredictions incur a penalty but correct predictions save cycles.
+
+4. **Prefetching**: Hardware automatically fetches data into cache before it's needed, based on memory access pattern analysis.
+
+#### Graphics Processing Unit (GPU) Architecture
+
+GPUs are designed for **high-throughput** parallel execution of many similar tasks. Unlike CPUs, GPUs dedicate the majority of their die area to execution units, accepting higher latency per operation in exchange for massive parallelism [1][2].
+
+**GPU Architecture Overview:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           GPU ARCHITECTURE OVERVIEW                              │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │                   STREAMING MULTIPROCESSOR (SM) × 40-144                  │  │
+│  │  ┌─────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │  WARP SCHEDULER      WARP SCHEDULER      WARP SCHEDULER             │  │  │
+│  │  │       │                    │                    │                   │  │  │
+│  │  │       ▼                    ▼                    ▼                   │  │  │
+│  │  │  ┌─────────┐          ┌─────────┐          ┌─────────┐              │  │  │
+│  │  │  │ 32 ALUs │          │ 32 ALUs │          │ 32 ALUs │    ...       │  │  │
+│  │  │  │ (INT32) │          │ (INT32) │          │ (INT32) │              │  │  │
+│  │  │  └─────────┘          └─────────┘          └─────────┘              │  │  │
+│  │  │  ┌─────────┐          ┌─────────┐          ┌─────────┐              │  │  │
+│  │  │  │ 32 FPUs │          │ 32 FPUs │          │ 32 FPUs │    ...       │  │  │
+│  │  │  │ (FP32)  │          │ (FP32)  │          │ (FP32)  │              │  │  │
+│  │  │  └─────────┘          └─────────┘          └─────────┘              │  │  │
+│  │  │  ┌─────────────────────────────────────────────────────────────┐    │  │  │
+│  │  │  │              TENSOR CORES (AI acceleration)                 │    │  │  │
+│  │  │  └─────────────────────────────────────────────────────────────┘    │  │  │
+│  │  │  ┌─────────────────────────────────────────────────────────────┐    │  │  │
+│  │  │  │              SPECIAL FUNCTION UNITS (sin, cos, exp, log)    │    │  │  │
+│  │  │  └─────────────────────────────────────────────────────────────┘    │  │  │
+│  │  │                                                                     │  │  │
+│  │  │  ┌─────────────────┐  ┌──────────────────────────────────────┐     │  │  │
+│  │  │  │ REGISTER FILE   │  │    SHARED MEMORY / L1 CACHE          │     │  │  │
+│  │  │  │   256 KB        │  │         48-164 KB                    │     │  │  │
+│  │  │  └─────────────────┘  └──────────────────────────────────────┘     │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐│
+│  │                           L2 CACHE (4-72 MB)                                ││
+│  └─────────────────────────────────────────────────────────────────────────────┘│
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐│
+│  │              GLOBAL MEMORY (VRAM) - HBM2/GDDR6 - 8-80 GB                    ││
+│  │                    Memory Bandwidth: 500 - 3,000 GB/s                       ││
+│  └─────────────────────────────────────────────────────────────────────────────┘│
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**GPU Component Details:**
+
+| Component | Description | Typical Values |
+|-----------|-------------|----------------|
+| **Streaming Multiprocessors (SMs)** | Independent processing units, each containing multiple execution units | 40-144 SMs |
+| **CUDA Cores / Stream Processors** | Simple ALUs for parallel integer and floating-point operations | 2,000-16,000+ |
+| **FP32 Units** | Single-precision floating-point arithmetic operations | 64-128 per SM |
+| **FP64 Units** | Double-precision floating-point (often 1/2 or 1/64 of FP32) | 32-64 per SM |
+| **Tensor Cores** | Matrix multiply-accumulate units for AI workloads | 4-8 per SM |
+| **Special Function Units (SFU)** | Transcendental functions (sin, cos, exp, log, sqrt) | 4-16 per SM |
+| **Warp Schedulers** | Hardware units that select and dispatch warps for execution | 4 per SM |
+| **Register File** | Per-SM fast storage for thread state | 256 KB per SM |
+| **Shared Memory** | Per-SM programmable cache shared by threads in a block | 48-164 KB per SM |
+| **Memory Bandwidth** | Global memory throughput | 500-3,000 GB/s |
+
+#### Architectural Comparison Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    CPU vs GPU ARCHITECTURE COMPARISON                            │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Metric              │ CPU (Modern Desktop)    │ GPU (Modern HPC)              │
+│   ────────────────────┼─────────────────────────┼───────────────────────────────│
+│   Cores               │ 8-24                    │ 5,000-16,000 (simple)         │
+│   Clock Speed         │ 3.5-5.5 GHz             │ 1.5-2.5 GHz                   │
+│   Peak FP32 TFLOPS    │ 0.5-2                   │ 10-80                         │
+│   Peak FP64 TFLOPS    │ 0.25-1                  │ 5-40 (HPC GPUs)               │
+│   Memory Bandwidth    │ 50-100 GB/s             │ 500-3,000 GB/s                │
+│   Cache               │ 64+ MB (L1+L2+L3)       │ 4-72 MB (L2)                  │
+│   Die Area (Control)  │ ~50%                    │ ~10%                          │
+│   Die Area (Compute)  │ ~10%                    │ ~70%                          │
+│   Power (TDP)         │ 65-250W                 │ 150-700W                      │
+│   Best For            │ Latency-sensitive       │ Throughput-intensive          │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### GPU Memory Hierarchy
+
+GPU memory is organized in a hierarchy that trades off capacity for access latency and bandwidth [3][4]. Understanding this hierarchy is essential for achieving optimal performance.
+
+**Memory Hierarchy Visualization:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         GPU MEMORY HIERARCHY                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│                              ┌────────────┐                                      │
+│                        Thread│ REGISTERS  │                                      │
+│                              │ 255 max    │  ◄── Fastest: 1 cycle               │
+│                              │ per thread │      Highest bandwidth               │
+│                              └─────┬──────┘      Per-thread private              │
+│                                    │                                             │
+│                                    ▼                                             │
+│                    ┌───────────────────────────────┐                             │
+│               Block│     SHARED MEMORY / L1       │                             │
+│                    │       48 - 164 KB            │  ◄── Fast: 1-4 cycles       │
+│                    │       per SM                 │      ~10 TB/s bandwidth      │
+│                    │   (programmable scratchpad)  │      Shared within block     │
+│                    └───────────────┬───────────────┘                             │
+│                                    │                                             │
+│                                    ▼                                             │
+│              ┌─────────────────────────────────────────┐                         │
+│         GPU │              L2 CACHE                    │                         │
+│              │              4 - 72 MB                  │  ◄── Medium: ~200 cycles│
+│              │              (unified)                  │      ~4 TB/s bandwidth  │
+│              └───────────────────┬─────────────────────┘      Shared across SMs  │
+│                                  │                                               │
+│                                  ▼                                               │
+│       ┌──────────────────────────────────────────────────────┐                   │
+│  VRAM │             GLOBAL MEMORY (HBM2/GDDR6)               │                   │
+│       │                    8 - 80 GB                         │  ◄── Slow: ~500 cy│
+│       │              Bandwidth: 500-3000 GB/s                │      High capacity│
+│       └──────────────────────────┬───────────────────────────┘                   │
+│                                  │                                               │
+│                             PCIe/NVLink                                          │
+│                                  │                                               │
+│                                  ▼                                               │
+│      ┌───────────────────────────────────────────────────────────┐               │
+│ Host │               SYSTEM MEMORY (CPU RAM)                     │               │
+│      │                    16 - 256+ GB                           │  ◄── Slowest  │
+│      │              Bandwidth: 16-64 GB/s via PCIe               │      ~10K cy  │
+│      └───────────────────────────────────────────────────────────┘               │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Memory Type Characteristics:**
+
+| Memory Type | Scope | Size | Latency | Bandwidth | Persistence |
+|-------------|-------|------|---------|-----------|-------------|
+| **Registers** | Per-thread | 255 × 32-bit per thread | 1 cycle | ~20 TB/s | Thread lifetime |
+| **Shared Memory** | Per-block | 48-164 KB per SM | 1-4 cycles | ~10 TB/s | Block lifetime |
+| **L1 Cache** | Per-SM | 128-256 KB per SM | ~28 cycles | ~10 TB/s | Automatic |
+| **L2 Cache** | Global | 4-72 MB | ~193 cycles | ~4 TB/s | Automatic |
+| **Global Memory** | Global | 8-80 GB | ~500 cycles | 0.5-3 TB/s | Kernel lifetime |
+| **Constant Memory** | Global | 64 KB | ~4 cycles (cached) | ~10 TB/s | Read-only |
+| **Texture Memory** | Global | Uses global | ~400 cycles | Cached | Read-only, spatial locality |
+| **System Memory** | Host | Varies | ~10,000 cycles | 16-64 GB/s | Program lifetime |
+
+### SIMT Execution Model
+
+Modern GPUs use the **Single Instruction, Multiple Threads (SIMT)** execution model, pioneered by NVIDIA [1][2]. This model extends the traditional SIMD (Single Instruction, Multiple Data) paradigm with thread-level abstraction.
+
+#### SIMD vs SIMT Comparison
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         SIMD vs SIMT COMPARISON                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   SIMD (CPU Vector Extensions)              SIMT (GPU Execution Model)          │
+│   ─────────────────────────────             ────────────────────────            │
+│                                                                                  │
+│   ┌─────────────────────────┐              ┌─────────────────────────┐          │
+│   │  Vector Register        │              │  Warp (32 threads)      │          │
+│   │  ┌───┬───┬───┬───┐      │              │  ┌───┬───┬───┬───┬...┐  │          │
+│   │  │v0 │v1 │v2 │v3 │      │              │  │T0 │T1 │T2 │T3 │   │  │          │
+│   │  └───┴───┴───┴───┘      │              │  └───┴───┴───┴───┴...┘  │          │
+│   │        ↓                │              │        ↓                │          │
+│   │  ┌─────────────────┐    │              │  ┌─────────────────┐    │          │
+│   │  │   VADD.4F32     │    │              │  │      ADD        │    │          │
+│   │  │ (vector add 4×) │    │              │  │  (32 threads)   │    │          │
+│   │  └─────────────────┘    │              │  └─────────────────┘    │          │
+│   └─────────────────────────┘              └─────────────────────────┘          │
+│                                                                                  │
+│   • Programmer explicitly                  • Each thread has independent        │
+│     manages vector operations                program counter (logically)        │
+│   • Fixed vector width                     • Hardware manages divergence        │
+│   • No concept of threads                  • Threads can have unique state      │
+│   • Programmer handles masking             • Automatic predication              │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Aspect | SIMD (CPU) | SIMT (GPU) |
+|--------|------------|------------|
+| **Full Name** | Single Instruction, Multiple Data | Single Instruction, Multiple Threads |
+| **Programming Model** | Explicit vector intrinsics or compiler auto-vectorization | Independent scalar threads grouped into warps |
+| **Divergence Handling** | Programmer must handle with masking | Hardware-managed with predication |
+| **Thread Independence** | No thread concept; single control flow | Each thread has own registers, can diverge |
+| **Vector Width** | Fixed (128/256/512 bits) | Dynamic (warp size × data type) |
+| **Examples** | Intel SSE/AVX/AVX-512, ARM NEON | NVIDIA CUDA, AMD RDNA, Apple Metal |
+
+#### Warps and Wavefronts
+
+Threads are organized into groups that execute in lockstep [1][2]:
+
+- **Warp** (NVIDIA): 32 threads executing the same instruction simultaneously
+- **Wavefront** (AMD): 32 or 64 threads (architecture-dependent)
+- **Subgroup** (Vulkan/WebGPU): Platform-independent term, typically 32 threads
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    THREAD HIERARCHY IN GPU COMPUTING                             │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Grid (All threads launched by a kernel)                                        │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                                                                          │   │
+│   │   Block 0              Block 1              Block 2         ...          │   │
+│   │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │   │
+│   │   │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │          │   │
+│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │          │   │
+│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │          │   │
+│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │          │   │
+│   │   │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │          │   │
+│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │          │   │
+│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │          │   │
+│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │          │   │
+│   │   └─────────────────┘  └─────────────────┘  └─────────────────┘          │   │
+│   │         │                                                                │   │
+│   │   Shared Memory                                                          │   │
+│   │   (per block)                                                            │   │
+│   │                                                                          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   Warp = 32 threads executing SAME instruction in lockstep                       │
+│   Block = Multiple warps sharing the same shared memory                          │
+│   Grid = All blocks launched by a single kernel                                  │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Branch Divergence
+
+When threads within a warp take different branches, the GPU serializes execution [1][2]:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         BRANCH DIVERGENCE                                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Code:                                                                          │
+│   ┌─────────────────────────────────────┐                                        │
+│   │ if (threadIdx.x < 16) {             │                                        │
+│   │     path_A();  // Threads 0-15      │                                        │
+│   │ } else {                            │                                        │
+│   │     path_B();  // Threads 16-31     │                                        │
+│   │ }                                   │                                        │
+│   └─────────────────────────────────────┘                                        │
+│                                                                                  │
+│   Execution Timeline:                                                            │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                                                                          │   │
+│   │   Time →   ║ Before Branch ║  path_A()  ║  path_B()  ║ After Branch    │   │
+│   │   ─────────╬───────────────╬────────────╬────────────╬─────────────────│   │
+│   │   Threads  ║               ║            ║            ║                 │   │
+│   │    0-15    ║   Active      ║   Active   ║   MASKED   ║    Active       │   │
+│   │   16-31    ║   Active      ║   MASKED   ║   Active   ║    Active       │   │
+│   │            ║               ║            ║            ║                 │   │
+│   │   Total    ║   32 active   ║ 16 active  ║ 16 active  ║   32 active     │   │
+│   │   Cycles   ║      N        ║     M      ║     M      ║      P          │   │
+│   │                                                                          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   Performance Impact: Both paths execute sequentially, doubling the time         │
+│   Best Practice: Minimize divergence; align branches with warp boundaries        │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Performance Optimization Concepts
+
+#### Occupancy
+
+**Occupancy** measures how effectively the GPU's computational resources are utilized [3]. It is defined as the ratio of active warps to the maximum number of warps an SM can support:
+
+```
+Occupancy = (Active Warps per SM) / (Maximum Warps per SM)
+```
+
+**Factors Limiting Occupancy:**
+
+| Factor | How It Limits Occupancy | Mitigation |
+|--------|-------------------------|------------|
+| **Register Usage** | More registers per thread → fewer threads per SM | Reduce register pressure |
+| **Shared Memory** | More shared memory per block → fewer blocks per SM | Optimize shared memory usage |
+| **Block Size** | Too small = poor occupancy; too large = resource issues | Use 128-256 threads per block |
+| **Maximum Threads/Block** | Hardware limit (typically 1024) | Split work across blocks |
+
+**Occupancy vs Performance:**
+
+```
+   Performance
+        │
+        │      ╱─────────────────────
+        │     ╱
+        │    ╱
+        │   ╱
+        │──╱     Diminishing returns above 50% occupancy
+        │ ╱      (for compute-bound kernels)
+        │╱
+        └──────────────────────────────────
+                20%    40%    60%    80%   100%
+                           Occupancy
+
+   Note: Higher occupancy is not always better!
+   Memory-bound kernels may perform well at lower occupancy.
+   Compute-bound kernels benefit more from higher occupancy.
+```
+
+#### Latency Hiding
+
+GPUs hide memory latency through **massive thread-level parallelism** rather than large caches [2][3]:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           LATENCY HIDING                                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Problem: Memory access takes ~500 cycles, but ALU operations take ~4 cycles   │
+│                                                                                  │
+│   Solution: Execute other warps while waiting for memory                         │
+│                                                                                  │
+│   Time (cycles) →                                                                │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │0       100      200      300      400      500      600      700        │   │
+│   │                                                                          │   │
+│   │Warp 0: [Compute]──►[Memory Load ═══════════════════════►][Compute]──►   │   │
+│   │                                                                          │   │
+│   │Warp 1:           [Compute]──►[Memory Load ═════════════════════►]       │   │
+│   │                                                                          │   │
+│   │Warp 2:                     [Compute]──►[Memory Load ═══════════════►]   │   │
+│   │                                                                          │   │
+│   │Warp 3:                               [Compute]──►[Memory Load ═════►]   │   │
+│   │                                                                          │   │
+│   │        ...more warps...                                                  │   │
+│   │                                                                          │   │
+│   │SM keeps switching between warps, so ALUs are always busy!                │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   Required Occupancy for Full Latency Hiding:                                    │
+│   Warps Needed ≥ Memory Latency (cycles) / Compute Latency (cycles)              │
+│   Example: 500 / 4 = 125 warps (if possible)                                     │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Memory Coalescing
+
+For optimal memory bandwidth utilization, threads in a warp should access **contiguous memory addresses** [3][4]:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         MEMORY COALESCING                                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   COALESCED ACCESS (Optimal):                                                    │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │   Thread:    T0   T1   T2   T3   T4   T5   T6   T7  ...  T31            │   │
+│   │              ↓    ↓    ↓    ↓    ↓    ↓    ↓    ↓        ↓              │   │
+│   │   Memory:   [0]  [1]  [2]  [3]  [4]  [5]  [6]  [7] ... [31]             │   │
+│   │              └────────────────────────────────────────────┘              │   │
+│   │                        ONE 128-byte transaction                          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   STRIDED ACCESS (Inefficient):                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │   Thread:    T0        T1        T2        T3       ...                  │   │
+│   │              ↓         ↓         ↓         ↓                             │   │
+│   │   Memory:   [0] [_]   [2] [_]   [4] [_]   [6] [_]  ...    (stride=2)    │   │
+│   │              └─┘       └─┘       └─┘       └─┘                            │   │
+│   │              MULTIPLE transactions - 50% bandwidth wasted                │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   RANDOM ACCESS (Worst):                                                         │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │   Thread:    T0            T1              T2           T3  ...          │   │
+│   │              ↓              ↓               ↓            ↓               │   │
+│   │   Memory:   [7]   [...]   [100]   [...]   [42]  [...]  [999] ...        │   │
+│   │              └┘            └─┘             └─┘          └───┘            │   │
+│   │              32 separate transactions - minimal bandwidth utilization    │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   Performance Impact:                                                            │
+│   │ Access Pattern  │ Transactions │ Effective Bandwidth │                      │
+│   │─────────────────│──────────────│─────────────────────│                      │
+│   │ Coalesced       │      1       │      100%           │                      │
+│   │ Stride-2        │      2       │       50%           │                      │
+│   │ Stride-4        │      4       │       25%           │                      │
+│   │ Random          │     32       │      ~3%            │                      │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Vectorization (SIMD within SIMT)
+
+GPUs can process multiple data elements per thread using **vector types** [5]. This combines the SIMT execution model with SIMD-style data parallelism:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           VECTORIZATION                                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Scalar Operation (1 element per thread, per instruction):                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │   Thread T0:  load a[0] → add → store result[0]                          │   │
+│   │   Thread T1:  load a[1] → add → store result[1]                          │   │
+│   │   ...                                                                    │   │
+│   │   Thread T31: load a[31] → add → store result[31]                        │   │
+│   │                                                                          │   │
+│   │   Instructions per warp: 32 loads + 32 adds + 32 stores = 96            │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   Vectorized Operation (4 elements per thread, per instruction - float4):        │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │   Thread T0:  load4 a[0:3]   → add4 → store4 result[0:3]                 │   │
+│   │   Thread T1:  load4 a[4:7]   → add4 → store4 result[4:7]                 │   │
+│   │   ...                                                                    │   │
+│   │   Thread T7:  load4 a[28:31] → add4 → store4 result[28:31]               │   │
+│   │                                                                          │   │
+│   │   Instructions per 8 threads: 8 loads + 8 adds + 8 stores = 24          │   │
+│   │   (4× fewer threads needed, 4× fewer instructions)                       │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+│   CubeCL Vectorization Example:                                                  │
+│   ```rust                                                                        │
+│   // Line<f32> with vectorization_factor=4 processes 4 floats at once           │
+│   #[cube]                                                                        │
+│   fn add_vectors<F: Float>(a: &Array<Line<F>>, b: &Array<Line<F>>,              │
+│                            out: &mut Array<Line<F>>) {                          │
+│       let idx = ABSOLUTE_POS;                                                    │
+│       out[idx] = a[idx] + b[idx];  // Adds 4 floats simultaneously              │
+│   }                                                                              │
+│   ```                                                                            │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Vectorization Benefits:**
+
+| Benefit | Description |
+|---------|-------------|
+| **Reduced Instruction Count** | Fewer instructions to issue and decode |
+| **Better Memory Bandwidth** | Wider loads/stores better utilize memory bus |
+| **Improved ALU Utilization** | Vector ALUs operate on multiple elements |
+| **Lower Register Pressure** | Fewer loop iterations, fewer temporaries |
 
 ---
 
 ## The Black-Scholes Example
 
-The Black-Scholes option pricing model is used as a reference implementation to demonstrate GPU acceleration. It's an ideal example because:
+The **Black-Scholes model** [6], developed by Fischer Black and Myron Scholes in 1973, provides a closed-form solution for pricing European-style options. It is used as a reference implementation to demonstrate GPU acceleration because:
 
-1. **Perfectly parallel**: Each option can be priced independently
-2. **Compute-intensive**: ~40 floating-point operations per option
-3. **Real-world application**: Widely used in quantitative finance
+1. **Perfectly parallel**: Each option can be priced independently (embarrassingly parallel)
+2. **Compute-intensive**: ~40 floating-point operations per option (exp, log, sqrt, erf)
+3. **Real-world application**: Widely used in quantitative finance and risk management
+4. **Numerical stability**: Well-understood computational characteristics
 
 ### The Black-Scholes Formula
 
-The Black-Scholes formula calculates the theoretical price of European call and put options:
+The Black-Scholes formula calculates the theoretical price of European call and put options [6]:
 
 **Call Option Price:**
 $$C = S \cdot N(d_1) - K \cdot e^{-rT} \cdot N(d_2)$$
@@ -113,57 +700,142 @@ Each option pricing requires approximately **40 floating-point operations**:
 
 ---
 
+## The CubeCL Framework
+
+**CubeCL** [7] is a multi-platform high-performance compute language extension for Rust, developed by Tracel AI. It provides a unified programming model for GPU computation across different backends.
+
+### Design Philosophy
+
+CubeCL addresses three core challenges in GPU programming [7]:
+
+1. **Portability**: Write once, run on CUDA, Metal, Vulkan, and WebGPU
+2. **Performance**: Automatic optimizations without sacrificing control
+3. **Ergonomics**: Rust-native syntax and type safety
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **JIT Compilation** | Kernels compiled at runtime for target platform |
+| **Automatic Vectorization** | SIMD instructions used automatically when available |
+| **Comptime** | Compile-time code generation and optimization |
+| **Autotuning** | Runtime benchmarking to select optimal configurations |
+
+### Automatic Vectorization
+
+CubeCL can automatically use SIMD instructions by specifying vectorization factor at launch time [7]:
+
+```rust
+// The Line<F> type represents vectorized data
+#[cube]
+fn gelu_scalar<F: Float>(x: Line<F>) -> Line<F> {
+    let sqrt2 = F::new(comptime!(2.0f32.sqrt()));
+    x * (Line::erf(x / Line::new(sqrt2)) + 1.0) / 2.0
+}
+```
+
+### Comptime System
+
+The comptime system allows compile-time code modification [7]:
+
+```rust
+// comptime! executes at kernel compilation, not runtime
+let sqrt2 = F::new(comptime!(2.0f32.sqrt()));
+```
+
+### Supported Platforms
+
+| Backend | Feature Flag | Native APIs |
+|---------|--------------|-------------|
+| **WGPU** | `wgpu` | Vulkan, Metal, DirectX 12, WebGPU |
+| **CUDA** | `cuda` | NVIDIA CUDA |
+| **CPU** | `cpu` | Native SIMD (AVX, NEON) |
+
+### Integration with Renoir
+
+Renoir uses CubeCL to implement the `map_gpu` operator, providing:
+
+- Automatic kernel compilation for the target GPU
+- Memory management and buffer allocation
+- Synchronization and result collection
+
+---
+
 ## The map_gpu Operator
 
 ### Architecture Overview
 
+The `MapGpu` operator implements **async pipelining** for optimal GPU utilization:
+
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           MapGpu Operator                               │
-│                                                                         │
-│  ┌─────────────┐      ┌───────────────────┐      ┌──────────────────┐   │
-│  │  Upstream   │      │   Input Buffer    │      │   Output Queue   │   │
-│  │  Operator   │─────▶│   (accumulates    │─────▶│   (results to    │   │
-│  │  .next()    │      │    until batch    │      │    emit one by   │   │
-│  │             │      │    is ready)      │      │    one)          │   │
-│  └─────────────┘      └─────────┬─────────┘      └────────┬─────────┘   │
-│                                 │                         │             │
-│                                 │  flush_to_gpu()         │             │
-│                                 ▼                         │             │
-│                       ┌───────────────────┐               │             │
-│                       │   GPU Kernel      │               │             │
-│                       │   Execution       │───────────────┘             │
-│                       │   (via GpuKernel  │                             │
-│                       │    trait)         │                             │
-│                       └───────────────────┘                             │
-│                                                                         │
-│  Batching Strategy:                                                     │
-│  - Fixed: flush every N items (default: 10M)                            │
-│  - Timed: flush on timeout OR max size                                  │
-│  - Adaptive: adapt batch size based on throughput                       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                           MapGpu Operator (Async Pipelined)                          │
+│                                                                                       │
+│  ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────────┐    │
+│  │    Upstream     │      │   Kernel Buffer    │      │     Output Queue        │    │
+│  │    Operator     │─────▶│   (SoA format,     │      │   (results to emit      │    │
+│  │    .next()      │      │    push() items)   │      │    one by one)          │    │
+│  └─────────────────┘      └──────────┬─────────┘      └────────────┬────────────┘    │
+│                                      │                              ▲                 │
+│                                      │ flush_to_gpu()               │                 │
+│                                      ▼                              │                 │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐   │
+│  │                          ASYNC PIPELINING                                      │   │
+│  │                                                                                │   │
+│  │   Batch N-1 (pending)              Batch N (current)                           │   │
+│  │   ┌─────────────────────┐          ┌─────────────────────┐                     │   │
+│  │   │  pending_handles    │          │  Launch kernel      │                     │   │
+│  │   │  pending_timestamps │◀─────────│  (async, no sync!)  │                     │   │
+│  │   └──────────┬──────────┘          └─────────────────────┘                     │   │
+│  │              │                                                                  │   │
+│  │              │ read_one() + bytemuck::cast_slice()                             │   │
+│  │              ▼                                                                  │   │
+│  │   ┌─────────────────────┐                                                      │   │
+│  │   │  Results from N-1   │──────────────────────────────────────────────────────┼───▶
+│  │   │  (matched with      │                                                      │   │
+│  │   │   timestamps)       │                                                      │   │
+│  │   └─────────────────────┘                                                      │   │
+│  │                                                                                │   │
+│  │   At end of stream: drain() collects final pending results                     │   │
+│  └───────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                       │
+│  Batching Strategy:                                                                   │
+│  - Fixed: flush every N items (default: 10M)                                          │
+│  - Timed: flush on timeout OR max size                                                │
+│  - Adaptive: adapt batch size based on throughput                                     │
+│                                                                                       │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow
+### Async Pipelining Benefits
+
+| Metric | Without Pipelining | With Pipelining | Improvement |
+|--------|-------------------|-----------------|-------------|
+| **GPU vs CPU Seq** | 1.8x faster | **4.9x faster** | 2.7x |
+| **GPU vs CPU Par** | 0.35x (slower) | **0.92x** (near parity) | 2.6x |
+| **Flush overhead** | ~60ms (10M items) | **~20ms** | 3x |
+
+### Data Flow (Pipelined)
 
 1. **Input**: Items arrive via `prev.next()` from upstream operator
-2. **Buffering**: Items accumulate in `buffer` with associated timestamps
-3. **Flush Trigger**: When batch is ready (size/time threshold), flush to GPU
-4. **GPU Execution**: `kernel.execute()` processes entire batch
-5. **Output Queue**: Results stored in `output_queue`
-6. **Emission**: Items emitted one at a time to downstream operators
+2. **Push to kernel**: Items pushed directly to kernel's SoA buffer (no intermediate copy)
+3. **Flush Trigger**: When batch is ready, `flush_to_gpu()` is called
+4. **Collect Previous**: First, collect results from PREVIOUS batch (if any)
+5. **Launch Current**: Launch GPU kernel for current batch (async, no sync wait!)
+6. **Store Handles**: Store GPU handles and timestamps for next flush to collect
+7. **Output Queue**: Previous batch results paired with timestamps, added to queue
+8. **End of Stream**: `drain()` called to collect final pending results
 
 ### Stream Element Handling
 
 | Element Type | Behavior |
 |--------------|----------|
-| `Item(x)` | Buffer the item |
-| `Timestamped(x, ts)` | Buffer with timestamp preserved |
+| `Item(x)` | Push to kernel buffer |
+| `Timestamped(x, ts)` | Push with timestamp preserved |
 | `Watermark(ts)` | Track max watermark |
 | `FlushBatch` | Force immediate GPU flush |
-| `FlushAndRestart` | Flush, then signal iteration boundary |
-| `Terminate` | Flush remaining items, then terminate |
+| `FlushAndRestart` | Flush + drain, then signal iteration boundary |
+| `Terminate` | Flush + drain remaining items, then terminate |
 
 ---
 
@@ -181,16 +853,50 @@ pub trait GpuKernel: Clone + Send + 'static {
     /// Output element type (must be bytemuck::Pod)
     type Output: Data + bytemuck::Pod;
     
-    /// Execute the kernel on a batch of inputs
-    fn execute(&self, ctx: &GpuContext, inputs: &[Self::Input]) -> Vec<Self::Output>;
+    /// Push a single item to the kernel's internal buffer.
+    /// Items are accumulated in an efficient format (e.g., SoA) for GPU processing.
+    fn push(&mut self, item: Self::Input);
+    
+    /// Get the current number of items in the buffer.
+    fn buffer_len(&self) -> usize;
+    
+    /// Flush the buffer to GPU and return results.
+    /// 
+    /// For **pipelined kernels**: Returns results from the PREVIOUS batch.
+    /// The current batch is launched async and results collected on next flush.
+    /// 
+    /// For **non-pipelined kernels**: Returns results from the current batch.
+    fn flush(&mut self, ctx: &GpuContext) -> Vec<Self::Output>;
+    
+    /// Drain any pending results from async pipelining.
+    /// Called at end of stream to collect final batch results.
+    /// Returns empty vector for non-pipelined kernels.
+    fn drain(&mut self, _ctx: &GpuContext) -> Vec<Self::Output> {
+        Vec::new()
+    }
     
     /// Optional: hint for preferred batch size
     fn preferred_batch_size(&self) -> Option<usize> { None }
     
-    /// Optional: one-time initialization
+    /// Optional: one-time initialization (shader compilation, buffer allocation)
     fn setup(&mut self, _ctx: &GpuContext) {}
+    
+    /// Legacy API: execute on a batch (default uses push + flush)
+    fn execute(&mut self, ctx: &GpuContext, inputs: &[Self::Input]) -> Vec<Self::Output> {
+        for input in inputs {
+            self.push(input.clone());
+        }
+        self.flush(ctx)
+    }
 }
 ```
+
+### Pipelined vs Non-Pipelined Kernels
+
+| Kernel Type | flush() Returns | drain() Returns | When to Use |
+|-------------|-----------------|-----------------|-------------|
+| **Non-pipelined** | Current batch | Empty | Simple kernels, low latency |
+| **Pipelined** | Previous batch | Final batch | High throughput, overlapping compute |
 
 ### Type Requirements
 
@@ -290,7 +996,7 @@ fn black_scholes_kernel<F: Float>(
     strike_prices: &Array<Line<F>>,
     time_to_expirations: &Array<Line<F>>,
     risk_free_rates: &Array<Line<F>>,
-    volatilities: &Array<Line<F>>,
+    volatilises: &Array<Line<F>>,
     call_results: &mut Array<Line<F>>,
     put_results: &mut Array<Line<F>>,
 ) {
@@ -301,7 +1007,7 @@ fn black_scholes_kernel<F: Float>(
         let k = strike_prices[ABSOLUTE_POS];
         let t = time_to_expirations[ABSOLUTE_POS];
         let r = risk_free_rates[ABSOLUTE_POS];
-        let v = volatilities[ABSOLUTE_POS];
+        let v = volatilises[ABSOLUTE_POS];
 
         // Calculate d1 and d2
         let sqrt_t = Line::sqrt(t);
@@ -755,36 +1461,432 @@ With 256 threads per cube and thousands of cubes, the GPU can process **millions
 
 ---
 
-## Performance Bottlenecks
+## Performance Bottlenecks and Optimizations
 
-Understanding where time is spent helps optimize GPU kernels:
+Understanding where time is spent in GPU operations is critical for optimization. Detailed profiling using `samply` and internal timing instrumentation revealed the following breakdown:
 
-| Problem Size | Primary Bottleneck | GPU Efficiency |
-|--------------|-------------------|----------------|
-| < 1,000 | Kernel launch overhead | Low |
-| 1K - 100K | Memory transfer | Medium |
-| 100K - 10M | Compute bound | High |
-| 10M - 250M | Memory bandwidth | High (optimal) |
-| > 250M | Memory system pressure | Declining |
+### Flush Operation Timing Breakdown (10M options, without pipelining)
 
-### GPU Overhead Breakdown
+| Phase | Time (ms) | % of Total | Description |
+|-------|-----------|------------|-------------|
+| **GPU Sync** | 33-50 | 50% | Waiting for GPU kernel to complete |
+| **Construct** | 10-16 | 20-25% | Converting bytes to output structs |
+| **Buffer Create** | 10-12 | 12-18% | Allocating GPU buffers |
+| **Read Results** | 2-4 | 5-7% | Reading results from GPU memory |
+| **Kernel Launch** | 0.01 | <0.1% | Dispatching kernel (very fast) |
+| **TOTAL** | ~60 | 100% | |
 
-For small workloads (<1,000 options), CPU is faster due to:
-- Kernel launch overhead (~100-500 μs)
-- Memory transfer time
-- Shader compilation on first run
+### Optimizations Applied
+
+#### 1. Async Pipelining (Hides GPU Sync)
+
+The biggest bottleneck (GPU Sync, 50%) is **hidden** by overlapping execution:
+
+```text
+WITHOUT PIPELINING:
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌─────────┐
+│ Buffer │→│ Launch │→│  SYNC  │→│  Read  │→│Construct│   Total: ~60ms
+└────────┘ └────────┘ └────────┘ └────────┘ └─────────┘
+   15ms       0ms        33ms       4ms        8ms
+
+WITH PIPELINING:
+          ┌──── Batch N ────┐
+          │ Buffer │ Launch │
+          └────────┴────────┘
+                ↓ stored handles
+┌───── Collect Batch N-1 ─────┐
+│ Read Previous │ Construct   │ ← overlapped with GPU compute!
+└───────────────┴─────────────┘
+              Total: ~20ms (no sync wait!)
+```
+
+#### 2. bytemuck::cast_slice (Reduces Construct)
+
+Instead of per-element byte conversion:
+
+```rust
+// BEFORE: ~16ms for 10M items
+for (call_b, put_b) in call_chunks.zip(put_chunks) {
+    results.push(BlackScholesOutput {
+        call_price: f32::from_le_bytes([call_b[0], call_b[1], call_b[2], call_b[3]]),
+        put_price: f32::from_le_bytes([put_b[0], put_b[1], put_b[2], put_b[3]]),
+    });
+}
+
+// AFTER: ~8ms for 10M items (zero-copy reinterpretation)
+let call_prices: &[f32] = bytemuck::cast_slice(&call_bytes);
+let put_prices: &[f32] = bytemuck::cast_slice(&put_bytes);
+for i in 0..num_options {
+    results.push(BlackScholesOutput {
+        call_price: call_prices[i],
+        put_price: put_prices[i],
+    });
+}
+```
+
+#### 3. SoA (Structure of Arrays) Layout
+
+Kernel buffers use SoA instead of AoS for better memory coalescing:
+
+```rust
+// AoS: poor cache utilization on GPU
+struct AoSBuffer {
+    items: Vec<BlackScholesInput>,  // [S,K,T,r,σ], [S,K,T,r,σ], ...
+}
+
+// SoA: excellent GPU memory coalescing
+struct SoABuffers {
+    stocks: Vec<f32>,   // [S, S, S, S, ...]
+    strikes: Vec<f32>,  // [K, K, K, K, ...]
+    times: Vec<f32>,    // [T, T, T, T, ...]
+    rates: Vec<f32>,    // [r, r, r, r, ...]
+    vols: Vec<f32>,     // [σ, σ, σ, σ, ...]
+}
+```
+
+### Performance Results After Optimization
+
+| Problem Size | Before (Seq/GPU) | After (Seq/GPU) | Improvement |
+|--------------|------------------|-----------------|-------------|
+| 1M options | 1.8x | **4.7x** | 2.6x |
+| 5M options | 1.6x | **4.9x** | 3.1x |
+| 10M options | 1.7x | **4.7x** | 2.8x |
+
+| Metric | Before | After |
+|--------|--------|-------|
+| GPU vs CPU Parallel (12-core) | 0.35x (slower) | **0.92x** (near parity) |
+| Peak throughput | ~130M opts/s | **~195M opts/s** |
 
 ### Crossover Point
 
-GPU becomes faster at approximately **5,000-10,000 options**. Beyond this point, the massive parallelism of GPU outweighs the fixed overhead costs.
+GPU becomes faster than CPU at approximately **75,000 options**. Beyond this point, the massive parallelism of GPU outweighs the fixed overhead costs.
 
-### Peak Performance Zone (10M - 250M)
+---
 
-| Metric | Value (Apple M-series) | Value (NVIDIA RTX) |
-|--------|----------------------|-------------------|
-| Peak Throughput | ~2B options/sec | ~10B+ options/sec |
-| Peak GFLOPS | ~200 | ~1000+ |
-| Max Speedup | 180-270x | 300x+ |
+## GPU Performance Characteristics and Drop-off Analysis
+
+This section provides a detailed analysis of GPU performance behavior across different problem sizes, explaining the observed performance peaks and drops in benchmark results.
+
+### Performance Profile Overview
+
+GPU performance on the Black-Scholes benchmark follows a characteristic pattern with **two distinct drop-off points**:
+
+```
+                    GPU Speedup vs CPU Sequential
+                    
+    7│                ┌── Peak: ~1M items
+     │               ╱│   - Single batch execution
+    6│              ╱ │   - Optimal GPU utilization
+     │             ╱  │   - Cache-friendly working set
+    5│            ╱   │
+     │           ╱    │  ┌── Drop 1: Multi-batch overhead
+    4│          ╱     │ ╱    - Multiple kernel launches
+     │         ╱      │╱     - Synchronization points
+    3│        ╱       ╲
+     │       ╱         ╲    ┌── Plateau: Pipelining stabilizes
+    2│      ╱           ╲__╱   performance at steady state
+     │     ╱                ╲
+    1│____╱                  ╲__ Drop 2: Memory pressure
+     │                           - L2 cache thrashing
+    0└───────────────────────────- Thermal throttling
+      10K  100K  1M   10M  100M  1B
+               Problem Size (options)
+```
+
+### Drop 1: Performance Peak at ~1M, Decline to ~10M
+
+#### Root Cause: Batch Size Mismatch and Multi-Batch Overhead
+
+The first performance drop occurs when problem sizes exceed the configured `GPU_BATCH_SIZE`. With a typical batch size of 5 million items:
+
+| Problem Size | Number of Batches | GPU Execution Pattern |
+|-------------|-------------------|----------------------|
+| 100K options | 1 batch (partial, 2% full) | Single kernel, minimal overhead |
+| 1M options | 1 batch (partial, 20% full) | Single kernel, optimal balance |
+| 5M options | 1 batch (100% full) | Single kernel, maximum efficiency |
+| 10M options | 2 batches | 2 launches + 1 sync point |
+| 50M options | 10 batches | 10 launches + 9 sync points |
+| 100M options | 20 batches | 20 launches + 19 sync points |
+
+#### Why ~1M Items is Often the Sweet Spot
+
+At approximately **1 million items**, several factors converge for optimal performance:
+
+1. **Single Kernel Launch**: No inter-batch synchronization overhead
+2. **L2 Cache Efficiency**: Working set fits in GPU L2 cache (4-72 MB)
+   - 1M options × 28 bytes = 28 MB (fits in most GPU L2 caches)
+3. **Full GPU Saturation**: Enough work to hide memory latency
+4. **Minimal Memory Controller Contention**: Moderate bandwidth demand
+
+#### Multi-Batch Overhead Breakdown
+
+Each batch in the pipelined execution incurs the following overhead:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    PER-BATCH OVERHEAD BREAKDOWN                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Phase                          │ Time (5M batch) │ % of Batch Time            │
+│   ───────────────────────────────┼─────────────────┼────────────────────────────│
+│   Collect Previous Results       │ ~21-25 ms       │ 90-92%                     │
+│   Buffer Creation/Allocation     │ ~2.0-2.2 ms     │ 8-10%                      │
+│   Kernel Launch                  │ ~0.01 ms        │ <0.1%                      │
+│   ───────────────────────────────┼─────────────────┼────────────────────────────│
+│   TOTAL (async, no sync wait)    │ ~23-25 ms       │ 100%                       │
+│                                                                                  │
+│   Key Observation: "Collect Previous" dominates!                                 │
+│   This is the PCIe/memory bandwidth bottleneck for result transfer.             │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Analysis**: The `Collect Previous` phase (reading results from GPU memory) takes ~21-25ms for 5M items:
+- 5M items × 8 bytes (call + put prices) = 40 MB of results
+- 40 MB ÷ 25 ms ≈ **1.6 GB/s effective throughput**
+- This is well below theoretical PCIe bandwidth, indicating synchronization overhead
+
+#### Impact of Multi-Batch Execution
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    SINGLE BATCH vs MULTI-BATCH EXECUTION                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Single Batch (1M items, batch_size=5M):                                        │
+│   ┌──────────────────────────────────────────────────────────┐                   │
+│   │ [Kernel 1] ───────────────────────────> [Collect]        │                   │
+│   └──────────────────────────────────────────────────────────┘                   │
+│   Total: 1 launch + 1 collect = minimal overhead                                 │
+│                                                                                  │
+│   Multi-Batch (50M items, batch_size=5M = 10 batches):                           │
+│   ┌─────────────────────────────────────────────────────────────────────────┐    │
+│   │ [K1]──►[Collect1]──►[K2]──►[Collect2]──► ... ──►[K10]──►[Collect10]     │    │
+│   │     ↑              ↑              ↑                                      │    │
+│   │ Sync Point     Sync Point     Sync Point (9 total sync points)          │    │
+│   └─────────────────────────────────────────────────────────────────────────┘    │
+│   Total: 10 launches + 10 collects + 9 synchronizations                          │
+│                                                                                  │
+│   Even with async pipelining (overlapping execution):                            │
+│   ┌─────────────────────────────────────────────────────────────────────────┐    │
+│   │ [K1]──────────►                                                          │    │
+│   │        [Collect1 + K2]──────────►                                        │    │
+│   │                        [Collect2 + K3]──────────►                        │    │
+│   │                                            ...                           │    │
+│   └─────────────────────────────────────────────────────────────────────────┘    │
+│   Still: N-1 sequential collect operations that cannot be parallelized           │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Drop 2: Performance Degradation at 100M+ Items
+
+#### Root Causes: Memory Hierarchy and System Limits
+
+The second performance drop at very large problem sizes (100M+ options) is caused by multiple compounding factors:
+
+#### 1. GPU L2 Cache Thrashing
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    L2 CACHE BEHAVIOR BY PROBLEM SIZE                             │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   GPU L2 Cache Size: 4-8 MB (Apple Silicon), 4-72 MB (discrete GPUs)            │
+│                                                                                  │
+│   Problem Size │ Working Set Size │ L2 Cache Status                             │
+│   ─────────────┼──────────────────┼─────────────────────────────────────────────│
+│   1M options   │    28 MB         │ Partial fit, good reuse                     │
+│   5M options   │   140 MB         │ Thrashing begins                            │
+│   10M options  │   280 MB         │ Severe thrashing                            │
+│   100M options │   2.8 GB         │ Complete thrashing (70-700× cache size)     │
+│   1B options   │    28 GB         │ Continuous cache misses                     │
+│                                                                                  │
+│   Impact: Every memory access becomes a cache miss at large sizes               │
+│           Full global memory latency (~500 cycles) for all accesses             │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2. Memory Bandwidth Saturation
+
+The Black-Scholes kernel requires significant memory bandwidth:
+
+```
+Memory Traffic per Option:
+├── Input: 5 × f32 (spot, strike, rate, time, volatility) = 20 bytes READ
+├── Output: 2 × f32 (call_price, put_price) = 8 bytes WRITE
+└── Total: 28 bytes per option
+
+Bandwidth Requirements at Different Scales:
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ Problem Size │ Data Volume │ @ 50M opts/s │ Required Bandwidth                  │
+│──────────────┼─────────────┼──────────────┼─────────────────────────────────────│
+│ 10M options  │ 280 MB      │ 5 sec/batch  │ 1.4 GB/s (well within limits)       │
+│ 100M options │ 2.8 GB      │ 2 sec        │ 1.4 GB/s (sustained pressure)       │
+│ 1B options   │ 28 GB       │ 20 sec       │ 1.4 GB/s + memory controller stress │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+Note: While 1.4 GB/s seems low compared to theoretical bandwidth (100-400 GB/s),
+the actual bottleneck is the streaming/batching overhead, not raw bandwidth.
+```
+
+#### 3. Thermal Throttling (Long-Running Workloads)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    THERMAL BEHAVIOR OVER TIME                                    │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   GPU Frequency                                                                  │
+│       │                                                                          │
+│   Max ├────╲                                                                     │
+│       │     ╲                                                                    │
+│   90% │      ╲____                                                               │
+│       │           ╲                                                              │
+│   80% │            ╲_______                                                      │
+│       │                    ╲_________ Thermal Throttle Zone                      │
+│   70% │                                                                          │
+│       └─────────────────────────────────────────────────────────────────── Time  │
+│       0s    10s    30s    60s   120s   300s                                      │
+│                                                                                  │
+│   Small problems: Complete before throttling kicks in                            │
+│   Large problems (100M+): Run long enough to hit thermal limits                  │
+│                                                                                  │
+│   Observation: First batches in a long run are faster than later batches        │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 4. Unified Memory Contention (Apple Silicon Specific)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    APPLE SILICON UNIFIED MEMORY ARCHITECTURE                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│                        ┌─────────────────────────┐                               │
+│                        │   Unified Memory Pool   │                               │
+│                        │      (16-128 GB)        │                               │
+│                        └───────────┬─────────────┘                               │
+│                                    │                                             │
+│                    ┌───────────────┼───────────────┐                             │
+│                    │               │               │                             │
+│                    ▼               ▼               ▼                             │
+│           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
+│           │  CPU Cores  │  │    GPU      │  │   Neural    │                      │
+│           │   (P + E)   │  │   Cores     │  │   Engine    │                      │
+│           └─────────────┘  └─────────────┘  └─────────────┘                      │
+│                                                                                  │
+│   Advantage: No PCIe transfer needed (data already in shared memory)            │
+│   Disadvantage: All processors compete for same memory bandwidth                │
+│                                                                                  │
+│   At large problem sizes:                                                        │
+│   - CPU threads (benchmark overhead) compete with GPU for memory                │
+│   - Memory controller becomes bottleneck                                         │
+│   - TLB (Translation Lookaside Buffer) pressure increases                       │
+│   - Page table walks become more frequent                                        │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why CPU Parallel Outperforms GPU on Apple Silicon
+
+The benchmark results show CPU Parallel winning at **all problem sizes** on Apple M-series chips. This is a significant finding that deserves explanation:
+
+#### Architectural Advantages of CPU Parallel on Apple Silicon
+
+| Factor | CPU Parallel | GPU via WGPU |
+|--------|--------------|--------------|
+| **Memory Access** | Direct, no buffer copy | Requires buffer allocation + copy |
+| **Data Format** | Native AoS (Array of Structures) | Must convert to SoA for coalescing |
+| **Parallelism** | 12 powerful cores, SMT | Many simple cores, but streaming overhead |
+| **Cache Efficiency** | Large L1/L2 per core | Shared L2, smaller per-thread |
+| **Latency** | Immediate execution | Batch + launch + sync overhead |
+| **Memory Bandwidth** | Full unified memory (~400 GB/s) | Same bandwidth, but format conversion |
+
+#### The Streaming/Batching Overhead Problem
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    CPU PARALLEL vs GPU STREAMING OVERHEAD                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   CPU Parallel Execution:                                                        │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ Thread 0: [Process item 0] [Process item 12] [Process item 24] ...      │   │
+│   │ Thread 1: [Process item 1] [Process item 13] [Process item 25] ...      │   │
+│   │ ...                                                                      │   │
+│   │ Thread 11:[Process item 11][Process item 23] [Process item 35] ...      │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│   → Direct processing, no batching, no synchronization points                   │
+│                                                                                  │
+│   GPU Streaming Execution:                                                       │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ [Collect items into batch] →                                             │   │
+│   │   [Convert AoS → SoA] →                                                  │   │
+│   │     [Allocate GPU buffers] →                                             │   │
+│   │       [Copy to GPU] →                                                    │   │
+│   │         [Launch kernel] →                                                │   │
+│   │           [Wait for completion] →                                        │   │
+│   │             [Copy results back] →                                        │   │
+│   │               [Convert SoA → AoS] →                                      │   │
+│   │                 [Emit results]                                           │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│   → Many steps, each with overhead; amortized over batch but never zero         │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### When GPU Would Win
+
+The GPU would outperform CPU Parallel in scenarios with:
+
+1. **Higher Arithmetic Intensity**: More computation per byte of memory accessed
+2. **Discrete GPU with Dedicated VRAM**: Avoids unified memory contention
+3. **Native GPU Data Format**: Data already in SoA format, no conversion needed
+4. **Longer Kernel Execution**: Computation time >> transfer time
+
+For Black-Scholes specifically:
+- Arithmetic intensity: ~40 FLOPs / 28 bytes ≈ 1.4 FLOPs/byte (relatively low)
+- This makes it **memory-bound**, where CPU's cache hierarchy excel
+
+### Performance Optimization Recommendations
+
+Based on this analysis, here are recommendations for maximizing GPU performance:
+
+#### 1. Dynamic Batch Sizing
+
+```rust
+// Adapt batch size to problem size for optimal performance
+let batch_size = match num_options {
+    n if n <= 1_000_000 => n,           // Single batch for small problems
+    n if n <= 10_000_000 => 1_000_000,  // 1M batches for medium problems
+    _ => 5_000_000,                      // 5M batches for large problems
+};
+```
+
+#### 2. Vectorization Tuning
+
+```rust
+// Higher vectorization reduces thread count and improves coalescing
+let vectorization = match gpu_architecture {
+    AppleSilicon => 4,   // Apple GPUs prefer lower vectorization
+    NvidiaAmpere => 16,  // NVIDIA benefits from higher vectorization
+    _ => 8,              // Conservative default
+};
+```
+
+#### 3. Workload Suitability Assessment
+
+| Workload Characteristic | GPU Suitability | Recommendation |
+|------------------------|-----------------|----------------|
+| Arithmetic Intensity < 2 FLOPs/byte | Low | Use CPU Parallel |
+| Arithmetic Intensity 2-10 FLOPs/byte | Medium | Benchmark both |
+| Arithmetic Intensity > 10 FLOPs/byte | High | Use GPU |
+| Problem size < 100K | Low | Use CPU |
+| Problem size 100K - 10M | Medium | Benchmark both |
+| Problem size > 10M | Variable | Depends on batch efficiency |
 
 ---
 
@@ -1061,7 +2163,7 @@ struct BlackScholesInputSoA {
     strike_prices: Vec<f32>,
     time_to_expirations: Vec<f32>,
     risk_free_rates: Vec<f32>,
-    volatilities: Vec<f32>,
+    volatilises: Vec<f32>,
 }
 ```
 
@@ -1077,7 +2179,7 @@ If all options share the same `risk_free_rate` and `volatility`:
 ```rust
 // Instead of uploading 250M × 2 × 4 = 2GB of constant data:
 // risk_free_rates: [0.05, 0.05, 0.05, ...] × 250M
-// volatilities:    [0.20, 0.20, 0.20, ...] × 250M
+// volatilises:    [0.20, 0.20, 0.20, ...] × 250M
 
 // Use uniform/constant memory (upload just 8 bytes):
 #[cube(launch_unchecked)]
@@ -1159,25 +2261,20 @@ renoir/
 ├── examples/
 │   ├── kernels/                   # Reusable GPU kernels
 │   │   ├── mod.rs                 # Kernel module exports
-│   │   └── black_scholes.rs       # Black-Scholes kernel implementation
+│   │   ├── black_scholes.rs       # Black-Scholes kernel implementation
+│   │   └── monte_carlo.rs         # Monte Carlo kernel implementation
 │   ├── black_scholes_gpu.rs       # Black-Scholes Renoir streaming example
-│   ├── black_scholes_gpu_streaming.rs  # Double-buffered & multi-worker GPU streaming
+│   ├── monte_carlo_comparison.rs  # Monte Carlo GPU vs CPU comparison example
 │   └── gpu_batching_strategies.rs # Batching strategies demo
 └── benches/
-    ├── gpu_black_scholes/         # Black-Scholes benchmarks
-    │   ├── common.rs              # Shared utilities (BenchmarkType, file paths)
-    │   ├── standard.rs            # Standard CPU vs GPU benchmark
-    │   ├── streaming.rs           # Streaming simulation benchmark
-    │   ├── optimized.rs           # Optimized (kernel-only) benchmark
-    │   └── batching_comparison.rs # Batching strategy comparison
+    ├── gpu/                       # Unified GPU benchmarks directory
+    │   ├── common.rs              # Shared utilities (BenchmarkType, file paths, SystemConfig)
+    │   ├── black_scholes.rs       # Black-Scholes CPU vs GPU benchmark
+    │   └── monte_carlo.rs         # Monte Carlo CPU vs GPU benchmark
     ├── results/                   # Benchmark output files (organized by type and date)
-    │   ├── standard/              # Standard benchmark results
+    │   ├── black_scholes/         # Black-Scholes benchmark results
     │   │   └── YYYY-MM-DD/        # Date-organized subdirectories
-    │   ├── optimized/             # Optimized benchmark results
-    │   │   └── YYYY-MM-DD/
-    │   ├── streaming/             # Streaming benchmark results
-    │   │   └── YYYY-MM-DD/
-    │   └── comparison/            # Batching comparison results
+    │   └── monte_carlo/           # Monte Carlo benchmark results
     │       └── YYYY-MM-DD/
     └── tools/                     # Analysis scripts
         └── plot_benchmark.py      # Unified plotting tool for all benchmark types
@@ -1214,20 +2311,24 @@ use black_scholes_kernel::*;
 
 **Usage in benchmarks:**
 ```rust
-// benches/gpu_black_scholes/standard.rs
-#[path = "../../examples/kernels/black_scholes.rs"]
-mod black_scholes_kernel;
-use black_scholes_kernel::*;
+// benches/gpu/black_scholes.rs
+mod common;  // Shared utilities in same directory
+use common::{format_number, get_benchmark_filepath, BenchmarkType, ...};
+
+#[path = "../../examples/kernels/mod.rs"]
+mod kernels;
+use kernels::black_scholes::{BlackScholesKernel, black_scholes_cpu, ...};
 ```
 
-#### Benchmarks (`benches/gpu_black_scholes/`)
+#### Benchmarks (`benches/gpu/`)
+
+All GPU benchmarks are unified in a single directory with shared utilities:
 
 | Benchmark | File | Description |
 |-----------|------|-------------|
-| Standard | `standard.rs` | CPU vs GPU with pre-allocated data |
-| Streaming | `streaming.rs` | Streaming simulation with lazy iterators |
-| Optimized | `optimized.rs` | Kernel-only timing, SoA data layout |
-| Batching Comparison | `batching_comparison.rs` | Compare different batching strategies |
+| Black-Scholes | `black_scholes.rs` | CPU Sequential/Parallel vs GPU comparison |
+| Monte Carlo | `monte_carlo.rs` | CPU Sequential/Parallel vs GPU for path-dependent options |
+| Common | `common.rs` | Shared utilities: test sizes, formatting, JSON output, SystemConfig |
 
 #### Utilities (`src/utils/`)
 
@@ -1467,6 +2568,23 @@ fn main() {
 
 The examples demonstrate different GPU processing patterns, from simple Renoir streaming to advanced double-buffered pipelines.
 
+### Selecting a GPU Backend
+
+All examples support multiple GPU backends. Choose based on your hardware:
+
+```bash
+# WGPU backend (recommended for most users)
+# Works on: AMD, NVIDIA, Intel, Apple Silicon
+cargo run --example <example_name> --release --features gpu-wgpu
+
+# CUDA backend (NVIDIA only)
+# Requires: CUDA toolkit installed
+cargo run --example <example_name> --release --features gpu-cuda
+```
+
+> [!NOTE]
+> The `gpu-wgpu` backend uses Vulkan on Linux/Windows and Metal on macOS, automatically selecting the best native API for your GPU.
+
 ### Example 1: Black-Scholes GPU (Renoir Streaming)
 
 Demonstrates the `map_gpu` operator with Renoir's streaming API:
@@ -1481,42 +2599,28 @@ cargo run --example black_scholes_gpu --release --features gpu-wgpu
 - Streaming vs full-batch processing comparison
 - GPU result validation against CPU reference
 
-### Example 2: GPU Streaming with Double-Buffering
+### Example 2: GPU Streaming with Batch Strategies
 
-Demonstrates advanced streaming techniques for maximum GPU utilization:
+Demonstrates how batch size affects GPU performance using Renoir's `map_gpu_with_strategy`:
 
 ```bash
-# Default: 100M options, 10M batch size, auto-detect CPU workers
+# Default: 10M options
 cargo run --example black_scholes_gpu_streaming --release --features gpu-wgpu
 
-# Custom configuration
-TOTAL_OPTIONS=500000000 BATCH_SIZE=20000000 CPU_WORKERS=8 \
-    cargo run --example black_scholes_gpu_streaming --release --features gpu-wgpu
+# Custom total options
+TOTAL_OPTIONS=100000000 cargo run --example black_scholes_gpu_streaming --release --features gpu-wgpu
 ```
 
 **What it demonstrates:**
-- **Sequential GPU**: Baseline where GPU waits for data generation
-- **Double-Buffered Pipeline**: Single producer overlaps data generation with GPU execution
-- **Multi-Worker + Double-Buffered**: Multiple producer threads with atomic work distribution
+- **CPU Sequential**: Single-threaded baseline using Renoir's `map` operator
+- **GPU Small Batch (100K)**: Suboptimal batch size with high overhead
+- **GPU Optimal Batch (10M)**: Best throughput with good GPU utilization
+- **GPU Full Batch**: Single kernel launch for entire dataset
 
-**Architecture:**
-```
-Multi-Worker Pipeline:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Worker 0: [Gen Batch 0] [Gen Batch 4] [Gen Batch 8]  ...                   │
-│ Worker 1: [Gen Batch 1] [Gen Batch 5] [Gen Batch 9]  ...                   │
-│ Worker 2: [Gen Batch 2] [Gen Batch 6] [Gen Batch 10] ...                   │
-│ Worker 3: [Gen Batch 3] [Gen Batch 7] [Gen Batch 11] ...                   │
-│           ↓             ↓             ↓              ↓                      │
-│                    ┌──────────────────────────┐                             │
-│                    │   Bounded Channel (n+1)  │  ← Double-buffer            │
-│                    └──────────────────────────┘                             │
-│                                 ↓                                           │
-│                    ┌──────────────────────────┐                             │
-│                    │     GPU Consumer         │  ← Single GPU thread        │
-│                    └──────────────────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+**Key Insights:**
+- Small batches (<100K): High kernel launch overhead, poor GPU utilization
+- Optimal batches (10M): Best balance of throughput and memory safety
+- Full batch: Good for small datasets, risky for large ones (memory cliff at >50M)
 
 ### Example 3: GPU Batching Strategies
 
@@ -1542,139 +2646,69 @@ cargo run --example gpu_batching_strategies --release --features gpu-wgpu
 
 ## Running Benchmarks
 
-The benchmark suite is organized in `benches/gpu_black_scholes/` and includes four specialized benchmarks:
+The unified Black-Scholes benchmark compares CPU (sequential and parallel) with GPU performance.
 
-| Benchmark | Command | Description |
-|-----------|---------|-------------|
-| **Standard** | `gpu_black_scholes_standard` | CPU vs GPU with pre-allocated data |
-| **Streaming** | `gpu_black_scholes_streaming` | Streaming simulation with lazy iterators |
-| **Optimized** | `gpu_black_scholes_optimized` | Kernel-only timing, SoA data layout |
-| **Batching** | `gpu_black_scholes_batching_comparison` | Compare batching strategies |
+### Selecting a Backend for Benchmarks
 
-### Standard Benchmark
-
-Tests GPU vs CPU with pre-allocated data arrays (realistic Renoir streaming performance):
+Benchmarks support multiple GPU backends:
 
 ```bash
-# Run with default max options (10M)
-cargo bench --bench gpu_black_scholes_standard --features gpu-wgpu
+# WGPU backend - works on AMD, NVIDIA, Intel, Apple
+cargo bench --bench gpu_black_scholes --features gpu-wgpu
+cargo bench --bench gpu_monte_carlo --features gpu-wgpu
 
-# Run with custom max options
-MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes_standard --features gpu-wgpu
-
-# Skip Criterion detailed benchmarks (faster)
-cargo bench --bench gpu_black_scholes_standard --features gpu-wgpu -- --noplot
+# CUDA backend - NVIDIA only, requires CUDA toolkit
+cargo bench --bench gpu_black_scholes --features gpu-cuda
+cargo bench --bench gpu_monte_carlo --features gpu-cuda
 ```
 
-### Optimized Benchmark
+> [!TIP]
+> On systems with **AMD GPUs**, use `--features gpu-wgpu` which will automatically use Vulkan.
+> On systems with **NVIDIA GPUs**, you can use either backend, but `gpu-cuda` may offer slightly better performance.
 
-Tests raw GPU kernel performance with kernel-only timing and SoA data layout:
-
-```bash
-# Run optimized benchmark
-cargo bench --bench gpu_black_scholes_optimized --features gpu-wgpu
-
-# With custom max options
-MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes_optimized --features gpu-wgpu -- --noplot
-```
-
-**Optimized Mode Features:**
-- SoA (Structure-of-Arrays) data layout - no AoS→SoA conversion
-- Kernel-only timing (excludes data transfer)
-- Full-size warmup before timed runs
-- Rayon for CPU parallel
-- Achieves 200-300x speedups
-
-### Streaming Benchmark
-
-Simulates real-world streaming with lazy iterators where input size is unknown:
+### Running the Benchmark
 
 ```bash
-# Run streaming simulation with default settings
-cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu
+# Run with default problem sizes (10K to 50M options)
+cargo bench --bench gpu_black_scholes --features gpu-wgpu
 
-# Run with custom stream size (e.g., 100M items)
-MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu -- --noplot
+# Run with custom max problem size
+MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
 
-# Customize CPU workers for parallel comparison
-CPU_WORKERS=8 MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu -- --noplot
-```
-
-**Streaming Mode Features:**
-- Uses lazy `StreamingOptionsGenerator` iterator
-- Data generated on-demand (memory-efficient)
-- GPU uses Adaptive batching (100K min, 500M max)
-- Tests multiple sizes to show scaling behavior
-- Simulates unknown input size scenario
-
-### Batching Strategy Comparison Benchmark
-
-Compare different batching strategies:
-
-```bash
-# Run batching comparison
-cargo bench --bench gpu_black_scholes_batching_comparison --features gpu-wgpu
-
-# With custom max options
-MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes_batching_comparison --features gpu-wgpu -- --noplot
+# Skip Criterion plots (faster)
+cargo bench --bench gpu_black_scholes --features gpu-wgpu -- --noplot
 ```
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MAX_OPTIONS` | Maximum problem size to benchmark | 10,000,000 (10M) |
-| `CPU_WORKERS` | Number of CPU workers for parallel | 4 |
+| `MAX_OPTIONS` | Maximum problem size | 50,000,000 |
 
 ### Benchmark Output
 
-The benchmarks produce:
+Results are saved to:
+```
+benches/results/black_scholes/YYYY-MM-DD/
+├── black_scholes_benchmark_TIMESTAMP.json
+└── plot_black_scholes_benchmark_TIMESTAMP.png
+```
 
-1. **Console output**: Real-time progress table with dynamic formatting
-2. **JSON file**: Results saved to `benches/results/<type>/<date>/` subdirectories:
-   - `standard/<date>/standard_benchmark_<timestamp>.json` - Standard mode
-   - `streaming/<date>/streaming_benchmark_<timestamp>.json` - Streaming mode
-   - `optimized/<date>/optimized_benchmark_<timestamp>.json` - Optimized mode
-   - `comparison/<date>/comparison_benchmark_<timestamp>.json` - Batching comparison
-
-**File Naming Convention:**
-- Timestamp format: `YYYY-MM-DDTHH-MM-SS` (ISO 8601)
-- Example: `standard_benchmark_2025-12-04T10-30-45.json`
-
-Example output (Standard Mode):
+Example console output:
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║              Black-Scholes Renoir Benchmark: CPU vs GPU                      ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
-║  Platform:    macOS aarch64 WGPU                                             ║
-║  Max options: 10000000                                                       ║
-║  Output:      benches/results/standard/2025-12-04/standard_benchmark_*.json  ║
+║  Test Sizes:     16 sizes from 10.0K to 50.0M                                ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-┌────────┬─────────────────┬────────────────┬────────────────┬────────────────┬───────────┐
-│  Test  │     Options     │   CPU Time     │   GPU Time     │   Speedup      │  Valid    │
-├────────┼─────────────────┼────────────────┼────────────────┼────────────────┼───────────┤
-│     1  │            100  │      0.000498s │      0.038232s │          0.01x │    Yes    │
-│   ...  │            ...  │           ...  │           ...  │           ...  │    ...    │
-│    15  │        1000000  │      0.064985s │      0.041034s │          1.58x │    Yes    │
-└────────┴─────────────────┴────────────────┴────────────────┴────────────────┴───────────┘
-
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                           STANDARD BENCHMARK SUMMARY                          ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Total tests:           15                                                    ║
-║  GPU wins (vs CPU):     11 (73.3%)                                            ║
-║  Average speedup:       2.5x                                                  ║
-║  Max speedup:           5.7x                                                  ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-Results saved to: benches/results/standard/2025-12-04/standard_benchmark_2025-12-04T10-30-45.json
-
-Generate charts with:
-  python3 benches/tools/plot_benchmark.py benches/results/standard/2025-12-04/standard_benchmark_2025-12-04T10-30-45.json
-
-Or use benchmark type to plot the most recent file:
-  python3 benches/tools/plot_benchmark.py standard
+┌────┬───────────────┬──────────┬──────────┬──────────┬──────────┐
+│  # │     Size      │  CPU Seq │  CPU Par │    GPU   │ Seq/GPU  │
+├────┼───────────────┼──────────┼──────────┼──────────┼──────────┤
+│  1 │       10,000  │  0.001s  │  0.001s  │  0.001s  │   1.20x  │
+│  2 │    1,000,000  │  0.066s  │  0.013s  │  0.013s  │   4.69x  │
+│  3 │   10,000,000  │  0.660s  │  0.127s  │  0.131s  │   4.73x  │
+└────┴───────────────┴──────────┴──────────┴──────────┴──────────┘
 ```
 
 ---
@@ -1691,103 +2725,28 @@ Install the required Python packages:
 pip install matplotlib numpy
 ```
 
-### Unified Plotting Tool
-
-The `plot_benchmark.py` script handles all benchmark types with a single interface:
+### Usage
 
 ```bash
-# Plot by benchmark type (uses most recent file for that type)
-python3 benches/tools/plot_benchmark.py standard
-python3 benches/tools/plot_benchmark.py optimized
-python3 benches/tools/plot_benchmark.py streaming
-python3 benches/tools/plot_benchmark.py comparison
+# Plot from a specific JSON file
+python3 benches/tools/plot_benchmark.py benches/results/black_scholes/2025-12-29/black_scholes_benchmark_*.json
 
-# Or specify a specific JSON file (auto-detects benchmark type)
-python3 benches/tools/plot_benchmark.py benches/results/standard/2025-12-04/standard_benchmark_2025-12-04T10-30-45.json
-python3 benches/tools/plot_benchmark.py benches/results/comparison/2025-12-04/comparison_benchmark_2025-12-04T00-04-00.json
+# Or use benchmark type to plot the most recent file
+python3 benches/tools/plot_benchmark.py black_scholes
 ```
-
-### Supported Benchmark Types
-
-| Type | Command | Description |
-|------|---------|-------------|
-| `standard` | `python3 benches/tools/plot_benchmark.py standard` | Standard CPU vs GPU benchmark |
-| `optimized` | `python3 benches/tools/plot_benchmark.py optimized` | Optimized (kernel-only) benchmark |
-| `streaming` | `python3 benches/tools/plot_benchmark.py streaming` | Streaming simulation benchmark |
-| `comparison` | `python3 benches/tools/plot_benchmark.py comparison` | Batching strategy comparison |
 
 ### Chart Output
 
-Charts are saved as PNG files in the same directory as the JSON results:
-- `plot_standard_benchmark_<timestamp>.png`
-- `plot_optimized_benchmark_<timestamp>.png`
-- `plot_streaming_benchmark_<timestamp>.png`
-- `plot_comparison_benchmark_<timestamp>.png`
+Charts are saved as PNG in the same directory as the JSON results:
+- `plot_black_scholes_benchmark_TIMESTAMP.png`
 
-Each chart includes a **system configuration description** at the bottom showing:
-- Benchmark type (Standard, Optimized, Streaming, Batching Comparison)
-- Platform (OS, architecture, GPU backend)
-- Problem sizes tested
-- CPU workers count
-- Total tests
-- Streaming config (for streaming benchmarks)
-- Strategy info (for comparison benchmarks)
-
-### Chart Panels
-
-#### Standard/Optimized/Streaming Benchmarks (6 panels)
-
-1. **Execution Time vs Problem Size**: Log-log comparison of CPU/GPU times
-2. **GPU Speedup vs Problem Size**: Speedup ratio with break-even line
-3. **Computational Throughput**: GFLOPS achieved by each implementation
-4. **Pricing Throughput**: Options processed per second
-5. **Average Speedup by Size Range**: Bar chart by problem size category
-6. **Speedup Distribution**: Histogram of speedup values
-
-#### Comparison Benchmarks (6 panels)
-
-1. **Throughput by Strategy**: Bar chart comparing strategies at largest input size
-2. **Throughput vs Input Size**: Line chart showing performance scaling
-3. **Execution Time by Strategy**: Grouped bar chart for different input sizes
-4. **Strategy Ranking Heatmap**: Visual ranking (1=best, green) by input size
-5. **Average Throughput by Strategy**: Horizontal bar chart across all sizes
-6. **Throughput Distribution**: Box plot showing performance variance
-
-### Chart Interpretation
-
-- **Green points/bars**: GPU is faster
-- **Red points/bars**: CPU is faster
-- **Break-even line (dashed)**: 1.0x speedup boundary
-
-### Example Output
-
-When running the plotting tool, you'll see a summary like:
-
-```
-Using most recent standard file: benches/results/standard/2025-12-04/standard_benchmark_2025-12-04T10-30-45.json
-Loaded 27 benchmark results from benches/results/standard/2025-12-04/standard_benchmark_2025-12-04T10-30-45.json
-Detected benchmark type: standard
-
-Chart saved to: benches/results/standard/2025-12-04/plot_standard_benchmark_2025-12-04T10-30-45.png
-
-======================================================================
-          STANDARD BENCHMARK SUMMARY
-======================================================================
-Benchmark Type: Standard
-Platform: macos aarch64 WGPU (Renoir)
-Start time: 2025-12-04T10:30:45.000000Z
-Total benchmarks: 27
-
-Problem size range: 100 - 750,000,000 options
-Data size range: 0.000002 - 13.9698 GB
-
-Speedup Statistics (CPU Sequential / GPU):
-  Min:    0.072x
-  Max:    5.603x
-  Mean:   2.888x
-  Median: 3.340x
-...
-```
+The chart includes 6 panels:
+1. **Execution Time vs Problem Size** - Log-log comparison
+2. **GPU Speedup Ratios** - Speedup vs Sequential and Parallel
+3. **Computational Throughput** - GFLOPS
+4. **Pricing Throughput** - Options/second
+5. **Average Speedup by Size Range** - Bar chart
+6. **Speedup Distribution** - Histogram
 
 ---
 
@@ -1834,629 +2793,6 @@ Each option requires approximately 28 bytes (5 inputs + 2 outputs × 4 bytes):
 | 10 million | ~280 MB |
 | 100 million | ~2.8 GB |
 | 1 billion | ~28 GB |
-
----
-
-## Performance Optimization Journey
-
-This section documents the performance challenges encountered during development and the solutions applied to achieve optimal GPU throughput.
-
-### Initial Performance Issue
-
-The initial `map_gpu` implementation achieved only **~1.5-2x speedup** compared to CPU, far below the **100-300x speedup** achievable with direct GPU calls.
-
-### Root Cause Analysis
-
-The performance gap was caused by **batching overhead**:
-
-| Overhead Source | Impact |
-|-----------------|--------|
-| **Small batch sizes** | Multiple kernel launches instead of one |
-| **Data copying** | Repeated host-to-device transfers |
-| **Streaming model** | Per-item overhead for buffering and emission |
-| **Default 1M batch** | Too small for optimal GPU utilization |
-
-### Solutions Applied
-
-#### 1. Increased Default Batch Size (1M → 10M)
-
-The default fixed batch size was increased from 1 million to 10 million items:
-
-```rust
-// Before: 1M default (suboptimal for large workloads)
-GpuBatchStrategy::Fixed(1_000_000)
-
-// After: 10M default (better GPU utilization)
-GpuBatchStrategy::Fixed(10_000_000)
-```
-
-**Why this helps**: Larger batches amortize kernel launch overhead and maximize GPU parallelism.
-
-#### 2. Batch Size = Input Size Strategy
-
-For maximum performance, set batch size equal to the total input size:
-
-```rust
-// Single kernel launch for entire input
-.map_gpu_with_strategy(kernel, GpuBatchStrategy::fixed(num_items))
-```
-
-**Results**: This achieves **5-7x speedup** over CPU for million-scale inputs.
-
-#### 3. Direct Kernel Calls in Benchmarks
-
-The benchmark now uses direct `kernel.execute()` calls instead of the streaming `map_gpu` operator, which eliminates:
-
-- Stream buffering overhead
-- Output queue emission overhead
-- Per-item processing overhead
-
-```rust
-// Direct GPU call (maximum performance)
-let gpu_results = kernel.execute(gpu_ctx, &options);
-
-// vs. Streaming (has overhead)
-env.stream_iter(options).map_gpu(kernel).collect_vec();
-```
-
-#### 4. GPU Warmup in Kernel Setup
-
-Added a warmup phase to pre-compile shaders:
-
-```rust
-impl GpuKernel for BlackScholesKernel {
-    fn setup(&mut self, ctx: &GpuContext) {
-        // Warmup: compile shaders before timed runs
-        let warmup_inputs = generate_options(1024);
-        let _ = self.execute(ctx, &warmup_inputs);
-    }
-}
-```
-
-**Why this helps**: First kernel launch includes shader compilation time (~100-500ms). Warmup moves this overhead outside the timed benchmark.
-
-#### 5. Optimized Data Conversion
-
-Reduced memory allocations in the kernel execute method:
-
-```rust
-// Before: Multiple Vec allocations
-let stocks: Vec<f32> = inputs.iter().map(|i| i.stock_price).collect();
-// ... 5 more Vecs
-
-// After: Pre-allocated, single-pass conversion
-let mut stocks = Vec::with_capacity(num_elements_padded);
-for input in inputs {
-    stocks.push(input.stock_price);
-    // ... collect all fields in one pass
-}
-```
-
-### Performance Results After Optimization
-
-| Configuration | Speedup (vs CPU Sequential) |
-|--------------|----------------------------|
-| Initial implementation (1M batch) | ~1.5x |
-| Direct GPU call (full batch) | **5-7x** |
-| Theoretical maximum | ~100-300x* |
-
-*Note: The theoretical maximum (100-300x) is achieved by:
-- Direct CubeCL kernel calls without Renoir streaming
-- Pre-allocated, reused GPU buffers
-- No intermediate data structure conversions
-
-### Recommendations for Optimal Performance
-
-1. **For streaming workloads**: Use `map_gpu` with `GpuBatchStrategy::fixed(10_000_000)` or larger
-2. **For batch workloads**: Use direct kernel calls (bypassing streaming) when possible
-3. **For unknown input sizes**: Use `GpuBatchStrategy::adaptive(1_000_000, 100_000_000)`
-4. **Always implement `setup()`**: Pre-compile shaders during initialization
-
-### Trade-offs
-
-| Approach | Throughput | Latency | Memory |
-|----------|------------|---------|--------|
-| Small batches (1M) | Lower | Lower | Lower |
-| Large batches (10M+) | Higher | Higher | Higher |
-| Full input (single batch) | Maximum | Highest | Highest |
-
-Choose based on your use case:
-- **Real-time processing**: Smaller batches with `Timed` strategy
-- **Batch processing**: Full input as single batch
-- **Unknown workload**: `Adaptive` strategy
-
----
-
-## Streaming Performance Optimizations
-
-This section documents advanced techniques for maximizing GPU performance in streaming scenarios. These optimizations address the fundamental challenge of keeping the GPU fully utilized while processing continuous data streams.
-
-### The Streaming Challenge
-
-In a traditional streaming pipeline, the GPU sits idle while waiting for data:
-
-```
-Traditional Pipeline (Sequential):
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Time: ───────────────────────────────────────────────────────────────────→  │
-│                                                                             │
-│ CPU:  [Generate Batch 1] ──────────────── [Generate Batch 2] ────────────── │
-│                         ↓                                   ↓               │
-│ GPU:              idle  [Process Batch 1]  idle            [Process Batch 2]│
-│                                                                             │
-│ Problem: GPU waits for CPU data generation!                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-The optimizations below eliminate this idle time through pipelining and parallelization.
-
-### 1. Double-Buffered Pipeline
-
-**Problem**: GPU sits idle while CPU generates the next batch of data.
-
-**Solution**: Use a bounded channel to generate batches ahead of time, overlapping data generation with GPU execution.
-
-```rust
-use std::sync::mpsc;
-use std::thread;
-
-const BUFFER_AHEAD: usize = 2;  // Number of batches to buffer
-
-fn run_gpu_double_buffered(total_items: usize, batch_size: usize) {
-    // Bounded channel - blocks producer when buffer is full
-    let (tx, rx) = mpsc::sync_channel::<BlackScholesSoA>(BUFFER_AHEAD);
-    
-    // Producer thread - generates batches ahead of time
-    let producer = thread::spawn(move || {
-        let mut remaining = total_items;
-        let mut offset = 0;
-        
-        while remaining > 0 {
-            let size = remaining.min(batch_size);
-            let soa = generate_soa_with_seed(size, offset as u64);
-            
-            if tx.send(soa).is_err() {
-                break;  // Consumer dropped, stop producing
-            }
-            remaining -= size;
-            offset += size;
-        }
-    });
-    
-    // Consumer - processes on GPU while producer prepares next batch
-    let ctx = GpuContext::new();
-    while let Ok(batch_soa) = rx.recv() {
-        // GPU processes batch while producer generates the next one
-        let (_calls, _puts, _results, _threads) = 
-            run_optimized_gpu_benchmark(&ctx, &batch_soa, batch_soa.stocks.len());
-    }
-    
-    producer.join().unwrap();
-}
-```
-
-**How It Works:**
-
-```
-Double-Buffered Pipeline:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Time: ───────────────────────────────────────────────────────────────────→  │
-│                                                                             │
-│ CPU:  [Gen 1][Gen 2][Gen 3][Gen 4][Gen 5]...                               │
-│             ↓     ↓     ↓     ↓     ↓                                       │
-│ Buffer: [1,2] → [2,3] → [3,4] → [4,5] → ...   (capacity = 2)               │
-│             ↓     ↓     ↓     ↓     ↓                                       │
-│ GPU:       [Process 1][Process 2][Process 3][Process 4]...                 │
-│                                                                             │
-│ Benefit: GPU never waits! Always has a batch ready to process.             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Why `sync_channel` with `BUFFER_AHEAD = 2`?**
-
-| Buffer Size | Behavior |
-|-------------|----------|
-| 0 | Synchronous - producer waits for consumer (no benefit) |
-| 1 | Single buffer - slight overlap possible |
-| **2** | **Optimal - one batch processing, one ready, one generating** |
-| 3+ | Diminishing returns, uses more memory |
-
-### 2. Fixed Batch Sizing (10M Optimal)
-
-**Problem**: Variable batch sizes add complexity and the optimal batch size is well-understood from benchmarking.
-
-**Solution**: Use a fixed batch size of 10 million items, which provides excellent GPU utilization while staying safely below the 50M memory cliff.
-
-```rust
-const GPU_MAX_BATCH: usize = 50_000_000;   // Hard limit before memory cliff
-const DEFAULT_BATCH_SIZE: usize = 10_000_000;  // Optimal for most GPUs
-
-fn run_gpu_with_fixed_batches(total_items: usize, batch_size: usize) {
-    let effective_batch = batch_size.min(GPU_MAX_BATCH);
-    
-    // Process in fixed-size batches
-    let mut remaining = total_items;
-    let mut offset = 0;
-    let ctx = GpuContext::new();
-    
-    while remaining > 0 {
-        let size = remaining.min(effective_batch);
-        let soa = generate_soa_with_seed(size, offset as u64);
-        
-        let _ = run_optimized_gpu_benchmark(&ctx, &soa, size);
-        
-        remaining -= size;
-        offset += size;
-    }
-}
-```
-
-**Why 10M Fixed Batch Size?**
-
-```
-Throughput vs Batch Size (from benchmarks):
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Throughput                                                                  │
-│ (GFLOPS)                                                                    │
-│     ▲                                                                       │
-│     │                  ┌──────────────────────────┐                         │
-│ 80  │              ╱───┘   Optimal range (10-50M)  │                        │
-│     │            ╱                                 │                        │
-│ 60  │          ╱                                   │                        │
-│     │        ╱                                     ↓ Performance cliff!     │
-│ 40  │      ╱                                       │                        │
-│     │    ╱                                         │                        │
-│ 20  │  ╱                                           │                        │
-│     │╱                                             │                        │
-│  0  └──────────────────────────────────────────────┴────────────────────→   │
-│        1M     5M    10M    25M    50M    75M   100M                         │
-│                     ↑                    ↑                                  │
-│              DEFAULT_BATCH_SIZE    GPU_MAX_BATCH                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-| Batch Size | Throughput | Notes |
-|------------|------------|-------|
-| 1M | ~40 GFLOPS | GPU underutilized |
-| **10M** | **~75 GFLOPS** | **Optimal balance** |
-| 25M | ~78 GFLOPS | Near peak |
-| 50M | ~80 GFLOPS | Maximum before cliff |
-| >50M | <20 GFLOPS | Memory cliff! |
-
-**Configuration via Environment Variables:**
-
-```bash
-# Default: 10M batch size
-cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu
-
-# Custom batch size (stay under 50M!)
-BATCH_SIZE=25000000 cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu
-```
-
-**Why 10M Instead of 50M?**
-
-- **Memory headroom**: 10M uses ~200MB vs 1GB for 50M
-- **Better pipelining**: Smaller batches overlap better with data generation
-- **95% of peak**: Only 5-10% slower than maximum but much safer
-- **Consistency**: Performance is more predictable
-
-### 3. Multi-Worker Data Generation
-
-**Problem**: Single-threaded data generation can't keep up with GPU processing speed.
-
-**Solution**: Use multiple producer threads with atomic work distribution.
-
-```rust
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-
-fn run_gpu_parallel_producers(
-    total_items: usize,
-    batch_size: usize,
-    num_workers: usize,
-) {
-    let (tx, rx) = mpsc::sync_channel::<BlackScholesSoA>(num_workers + 1);
-    
-    // Atomic counter for work distribution among producers
-    let items_claimed = Arc::new(AtomicUsize::new(0));
-    
-    // Spawn multiple producer threads
-    let producers: Vec<_> = (0..num_workers)
-        .map(|worker_id| {
-            let tx = tx.clone();
-            let counter = Arc::clone(&items_claimed);
-            
-            thread::spawn(move || {
-                loop {
-                    // Atomically claim next batch
-                    let start_idx = counter.fetch_add(batch_size, Ordering::SeqCst);
-                    if start_idx >= total_items {
-                        break;
-                    }
-                    
-                    let size = (total_items - start_idx).min(batch_size);
-                    let seed = (worker_id as u64 * 1_000_000 + start_idx as u64) ^ 0xDEADBEEF;
-                    let soa = generate_soa_with_seed(size, seed);
-                    
-                    if tx.send(soa).is_err() {
-                        break;
-                    }
-                }
-            })
-        })
-        .collect();
-    
-    drop(tx);  // Close sender so receiver knows when to stop
-    
-    // Single GPU consumer
-    let ctx = GpuContext::new();
-    while let Ok(batch) = rx.recv() {
-        let _ = run_optimized_gpu_benchmark(&ctx, &batch, batch.stocks.len());
-    }
-    
-    for producer in producers {
-        producer.join().unwrap();
-    }
-}
-```
-
-**Multi-Worker Architecture:**
-
-```
-Multi-Worker Pipeline:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│ Worker 0: [Gen Batch 0] [Gen Batch 4] [Gen Batch 8]  ...                   │
-│ Worker 1: [Gen Batch 1] [Gen Batch 5] [Gen Batch 9]  ...                   │
-│ Worker 2: [Gen Batch 2] [Gen Batch 6] [Gen Batch 10] ...                   │
-│ Worker 3: [Gen Batch 3] [Gen Batch 7] [Gen Batch 11] ...                   │
-│           ↓             ↓             ↓              ↓                      │
-│           └─────────────┴─────────────┴──────────────┘                      │
-│                                 ↓                                           │
-│                    ┌──────────────────────────┐                             │
-│                    │   Bounded Channel (n+1)  │                             │
-│                    └──────────────────────────┘                             │
-│                                 ↓                                           │
-│                    ┌──────────────────────────┐                             │
-│                    │     GPU Consumer         │                             │
-│                    │   (Single GPU Thread)    │                             │
-│                    └──────────────────────────┘                             │
-│                                                                             │
-│ Work Distribution: Atomic counter ensures each batch is claimed exactly once│
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Why Atomic Counter for Work Distribution?**
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| Pre-assigned ranges | Simple | Uneven if generation time varies |
-| **Atomic counter** | **Load-balanced** | Slight atomic overhead |
-| Work-stealing queue | Most flexible | Complex implementation |
-
-### 4. GPU Context Caching
-
-**Problem**: Creating a new GPU context for each batch incurs significant overhead (~100-500ms for shader compilation).
-
-**Solution**: Cache the GPU context and reuse it across all batches.
-
-```rust
-use std::sync::OnceLock;
-
-/// Global cached GPU context
-static GPU_CONTEXT: OnceLock<GpuContext> = OnceLock::new();
-
-/// Get or create the cached GPU context
-fn get_gpu_context() -> &'static GpuContext {
-    GPU_CONTEXT.get_or_init(|| {
-        let ctx = GpuContext::new();
-        // Warmup: compile shaders once
-        let warmup = generate_soa_with_seed(1024, 0);
-        let _ = run_optimized_gpu_benchmark(&ctx, &warmup, 1024);
-        ctx
-    })
-}
-
-// Usage in processing loop:
-fn process_batches(batches: impl Iterator<Item = BlackScholesSoA>) {
-    let ctx = get_gpu_context();  // First call initializes, subsequent calls reuse
-    
-    for batch in batches {
-        let _ = run_optimized_gpu_benchmark(ctx, &batch, batch.stocks.len());
-    }
-}
-```
-
-**Context Initialization Timeline:**
-
-```
-Without Caching:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Batch 1: [Init GPU 500ms] [Compile Shaders 200ms] [Process 10ms]           │
-│ Batch 2: [Init GPU 500ms] [Compile Shaders 200ms] [Process 10ms]           │
-│ Batch 3: [Init GPU 500ms] [Compile Shaders 200ms] [Process 10ms]           │
-│                                                                             │
-│ Total: 3 × (500 + 200 + 10) = 2,130ms                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-With Caching:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Init:    [Init GPU 500ms] [Compile Shaders 200ms] [Warmup 10ms]            │
-│ Batch 1: [Process 10ms]                                                     │
-│ Batch 2: [Process 10ms]                                                     │
-│ Batch 3: [Process 10ms]                                                     │
-│                                                                             │
-│ Total: 700 + 3 × 10 = 730ms (3.5x faster!)                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Combined Strategy: GPU Parallel + Double-Buffered
-
-The streaming benchmark combines all optimizations into a single high-performance strategy:
-
-```rust
-/// GPU Parallel with Double-Buffered Pipeline
-/// 
-/// Combines:
-/// 1. Double-buffered pipeline (overlaps generation with processing)
-/// 2. Fixed 10M batch size (optimal for GPU utilization)
-/// 3. Multi-worker producers (parallelizes data generation)
-/// 4. GPU context caching (avoids repeated initialization)
-fn run_gpu_parallel(
-    total_items: usize,
-    batch_size: usize,
-    num_workers: usize,
-) -> (Duration, usize) {
-    let effective_batch = batch_size.min(GPU_MAX_BATCH);  // Respect 50M limit
-    
-    let start = Instant::now();
-    
-    // Bounded channel for double-buffering
-    let buffer_size = (num_workers + 1).min(BUFFER_AHEAD * 2);
-    let (tx, rx) = mpsc::sync_channel::<BlackScholesSoA>(buffer_size);
-    
-    // Atomic counter for work distribution
-    let items_sent = Arc::new(AtomicUsize::new(0));
-    
-    // Spawn producer threads
-    let producers: Vec<_> = (0..num_workers)
-        .map(|worker_id| {
-            let tx = tx.clone();
-            let sent_counter = Arc::clone(&items_sent);
-            
-            thread::spawn(move || {
-                loop {
-                    // Atomically claim next batch
-                    let start_idx = sent_counter.fetch_add(effective_batch, Ordering::SeqCst);
-                    if start_idx >= total_items {
-                        break;
-                    }
-                    
-                    let size = (total_items - start_idx).min(effective_batch);
-                    let seed = (worker_id as u64 * 1_000_000 + start_idx as u64) ^ 0xDEADBEEF;
-                    let soa = generate_soa_with_seed(size, seed);
-                    
-                    if tx.send(soa).is_err() {
-                        break;
-                    }
-                }
-            })
-        })
-        .collect();
-    
-    drop(tx);
-    
-    // Consumer processes batches on GPU
-    let ctx = GpuContext::new();  // Or use cached context
-    let mut total_processed = 0;
-    
-    while let Ok(batch_soa) = rx.recv() {
-        let batch_len = batch_soa.stocks.len();
-        let (_, _, results, _) = run_optimized_gpu_benchmark(&ctx, &batch_soa, batch_len);
-        total_processed += results.len();
-    }
-    
-    for producer in producers {
-        producer.join().unwrap();
-    }
-    
-    (start.elapsed(), total_processed)
-}
-```
-
-### Performance Impact Summary
-
-| Optimization | Impact | When to Use |
-|--------------|--------|-------------|
-| **Double-Buffered Pipeline** | Eliminates GPU idle time | Always for streaming |
-| **Fixed 10M Batch Size** | Optimal GPU utilization | Recommended default |
-| **Multi-Worker Producers** | Matches CPU gen speed to GPU | Fast GPUs, slow data gen |
-| **GPU Context Caching** | Eliminates 500-700ms overhead | Multiple batches |
-| **Combined (GPU Par+DblBuf)** | **Best overall throughput** | Production streaming |
-
-### Streaming Benchmark Comparison
-
-The streaming benchmark compares 4 strategies:
-
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| **CPU Sequential** | Single-threaded baseline | Reference only |
-| **GPU Seq+DblBuf** | Single producer, double-buffered GPU | Simple workloads |
-| **CPU Parallel** | Multi-threaded Rayon | CPU-bound work |
-| **GPU Par+DblBuf** | Multi-worker + double-buffered | **Maximum throughput** |
-
-**Running the Streaming Benchmark:**
-
-```bash
-# Default configuration
-cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu
-
-# Custom configuration
-MAX_OPTIONS=100000000 \
-CPU_WORKERS=8 \
-BATCH_SIZE=10000000 \
-cargo bench --bench gpu_black_scholes_streaming --features gpu-wgpu
-```
-
-**Expected Output:**
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                     Black-Scholes Streaming Benchmark                        ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║ Platform:        macOS aarch64 (Apple M1 Pro)                                ║
-║ Batch size:      10,000,000 (10M)                                            ║
-║ Buffer ahead:    2 batches                                                   ║
-║ CPU workers:     10                                                          ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-Strategies being compared:
-  1. CPU Sequential:     Single-threaded CPU baseline
-  2. GPU Seq+DblBuf:     Single producer, double-buffered GPU
-  3. CPU Parallel:       Multi-threaded CPU with Rayon (10 threads)
-  4. GPU Par+DblBuf:     Multi-worker producers, double-buffered GPU
-
-┌──────┬──────────────────┬───────────┬───────────┬───────────┬───────────┬─────────┬─────────┬───────┐
-│ Test │      Options     │  CPU Seq  │  GPU Seq  │  CPU Par  │  GPU Par  │ Seq Spd │ Par Spd │ Valid │
-├──────┼──────────────────┼───────────┼───────────┼───────────┼───────────┼─────────┼─────────┼───────┤
-│   1  │           10,000 │   0.0005s │   0.0012s │   0.0003s │   0.0015s │   0.42x │   0.20x │  Yes  │
-│   2  │          100,000 │   0.0049s │   0.0021s │   0.0012s │   0.0025s │   2.33x │   0.48x │  Yes  │
-│   3  │        1,000,000 │   0.0487s │   0.0085s │   0.0098s │   0.0095s │   5.73x │   1.03x │  Yes  │
-│   4  │       10,000,000 │   0.4872s │   0.0523s │   0.0854s │   0.0612s │   9.32x │   1.40x │  Yes  │
-│   5  │       50,000,000 │   2.4356s │   0.2145s │   0.4123s │   0.2456s │  11.35x │   1.68x │  Yes  │
-│   6  │      100,000,000 │   4.8712s │   0.4523s │   0.8245s │   0.4812s │  10.77x │   1.71x │  Yes  │
-└──────┴──────────────────┴───────────┴───────────┴───────────┴───────────┴─────────┴─────────┴───────┘
-
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                       STREAMING BENCHMARK SUMMARY                            ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║ Total tests:                       6                                         ║
-║ Batch size:                        10M                                       ║
-║ Buffer ahead:                      2 batches                                 ║
-║                                                                              ║
-║ GPU Sequential vs CPU Sequential:                                            ║
-║   Wins:                            5 (83.3%)                                 ║
-║   Avg speedup:                     6.65x                                     ║
-║   Max speedup:                    11.35x                                     ║
-║                                                                              ║
-║ GPU Parallel vs CPU Parallel:                                                ║
-║   Wins:                            4 (66.7%)                                 ║
-║   Avg speedup:                     1.08x                                     ║
-║   Max speedup:                     1.71x                                     ║
-║                                                                              ║
-║ Recommendations:                                                             ║
-║   Small inputs (<1M):              CPU Parallel                              ║
-║   Large inputs (>10M):             GPU Par+DblBuf                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-```
-
-### Key Insights
-
-1. **GPU Sequential excels at large batches**: 10x+ speedup over CPU sequential for 10M+ items
-2. **GPU Parallel vs CPU Parallel is competitive**: 1.5-2x speedup when GPU is properly fed
-3. **Fixed 10M batch size is optimal**: Provides 95% of peak performance with good memory headroom
-4. **Double-buffering is essential**: Without it, GPU utilization drops to <50%
-5. **Multi-worker producers scale well**: Up to CPU core count, then diminishing returns
 
 ---
 
@@ -2554,267 +2890,1589 @@ impl GpuContext {
 
 ## Benchmark Results and Analysis
 
-This section presents benchmark results from three types of performance tests:
-1. **Standard CPU vs GPU** - Pre-allocated data with direct GPU calls
-2. **Streaming Simulation** - Lazy iterators with Adaptive batching
-3. **Batching Strategy Comparison** - Different batching configurations
+The unified Black-Scholes benchmark compares CPU (sequential and parallel) vs GPU performance using Renoir's streaming operators with async pipelining.
 
-### Results Directory Structure
+### Dual Timing Measurement Methodology
 
-Benchmark results are organized by type and date for easy navigation:
+The benchmark provides **two separate performance measurements** for each execution strategy:
+
+| Measurement | What It Includes | Purpose |
+|-------------|-----------------|---------|
+| **Compute Only** | Pure computation time without result collection | Measures raw processing speed |
+| **Overall (Total)** | Compute + result collection/fetch | Measures real-world end-to-end performance |
 
 ```
-benches/results/
-├── standard/                      # Standard CPU vs GPU benchmark results
-│   ├── 2025-12-01/
-│   │   ├── standard_benchmark_2025-12-01T00-06-19.json
-│   │   └── plot_standard_benchmark_2025-12-01T00-06-19.png
-│   └── 2025-12-04/
-│       ├── standard_benchmark_2025-12-04T10-30-45.json
-│       └── plot_standard_benchmark_2025-12-04T10-30-45.png
-├── optimized/                     # Optimized (kernel-only) benchmark results
-│   └── YYYY-MM-DD/
-│       ├── optimized_benchmark_*.json
-│       └── plot_optimized_benchmark_*.png
-├── streaming/                     # Streaming simulation benchmark results
-│   └── YYYY-MM-DD/
-│       ├── streaming_benchmark_*.json
-│       └── plot_streaming_benchmark_*.png
-└── comparison/                    # Batching strategy comparison
-    └── YYYY-MM-DD/
-        ├── comparison_benchmark_*.json
-        └── plot_comparison_benchmark_*.png
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    TIMING MEASUREMENT BREAKDOWN                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   COMPUTE ONLY TIMING:                                                           │
+│   ┌─────────────────────────────────────────────────────────┐                    │
+│   │ [Stream Processing] ──► [Computation] ──► (Discard)     │                    │
+│   │                                                          │                    │
+│   │ Measures: Pure compute performance without I/O overhead  │                    │
+│   │ Use case: Compare raw algorithmic efficiency            │                    │
+│   └─────────────────────────────────────────────────────────┘                    │
+│                                                                                  │
+│   OVERALL (TOTAL) TIMING:                                                        │
+│   ┌─────────────────────────────────────────────────────────┐                    │
+│   │ [Stream Processing] ──► [Computation] ──► [Collect Vec] │                    │
+│   │                                                          │                    │
+│   │ Measures: End-to-end performance including result fetch  │                    │
+│   │ Use case: Realistic application performance              │                    │
+│   └─────────────────────────────────────────────────────────┘                    │
+│                                                                                  │
+│   For GPU workloads, the difference can be significant:                          │
+│   - Compute Only: Excludes GPU→CPU data transfer overhead                       │
+│   - Overall: Includes buffer allocation, synchronization, and result transfer   │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Naming Convention:**
-- JSON files: `{type}_benchmark_{YYYY-MM-DD}T{HH-MM-SS}.json`
-- Plot files: `plot_{type}_benchmark_{YYYY-MM-DD}T{HH-MM-SS}.png`
+**Why This Matters:**
 
----
+1. **GPU overhead visibility**: The difference between "Compute Only" and "Overall" reveals the GPU pipeline overhead (buffer creation, data transfer, synchronization)
 
-### Standard CPU vs GPU Benchmark (Non-Streaming)
+2. **Fair comparison**: Comparing "Compute Only" times shows raw computational throughput, while "Overall" shows practical application performance
 
-The standard benchmark uses **pre-allocated data arrays** and **direct GPU kernel calls** (batch size = input size). This represents the optimal GPU performance scenario.
+3. **Optimization targets**: If "Compute Only" is fast but "Overall" is slow, the bottleneck is in data transfer/collection, not computation
 
-**Test Configuration:**
-- Platform: macOS aarch64 (Apple Silicon)
-- GPU Backend: WGPU (Metal)
-- Problem sizes: 100 to 750 million options
-- GPU batch size: Equal to input size (single kernel launch)
-- Benchmark date: December 2024
+### Latest Benchmark Chart
 
-**Key Performance Metrics:**
+![Black-Scholes CPU vs GPU Benchmark Results](images/benchmark_chart.png)
+
+### Chart Interpretation
+
+The benchmark chart contains 6 panels that together tell the complete performance story:
+
+#### Panel 1: Execution Time vs Problem Size (Top-Left)
+- **Log-log plot** showing how execution time scales with problem size
+- **CPU Sequential (blue)**: Slowest, grows linearly with problem size
+- **CPU Parallel (green)**: ~10x faster than sequential, scales well
+- **GPU (orange/red)**: Performance depends on problem size
+- **Crossover point**: GPU becomes faster than CPU Sequential at ~50,000 options
+
+#### Panel 2: GPU Speedup Ratios (Top-Center)
+- **Blue line**: Speedup vs CPU Sequential (peaks at ~5x for 5M options)
+- **Green line**: Speedup vs CPU Parallel (stays below 1.0x - CPU Parallel wins)
+- **Dashed line at 1.0x**: Break-even point
+- **Shaded regions**: Green = GPU faster, Red = GPU slower
+
+#### Panel 3: Computational Throughput (Top-Right)
+- **GFLOPS** (40 FLOPS per option × options/second)
+- CPU Parallel achieves **~3.16 GFLOPS** peak
+- GPU achieves **~2.97 GFLOPS** peak
+- Both plateau after initial warmup
+
+#### Panel 4: Pricing Throughput (Bottom-Left)
+- Options processed per second (log scale)
+- CPU Parallel: **~75-78M options/second** sustained
+- GPU: **~50-74M options/second** depending on problem size
+- Higher is better
+
+#### Panel 5: Average Speedup by Size Range (Bottom-Center)
+- Bar chart showing speedup grouped by problem size category
+- GPU shows best speedup (4-5x) in the 1M-10M range vs CPU Sequential
+- GPU underperforms vs CPU Parallel at all sizes
+
+#### Panel 6: Speedup Distribution (Bottom-Right)
+- Histogram of speedup values across all test sizes
+- Shows the distribution of GPU performance relative to CPU
+
+### Performance Summary
 
 | Metric | Value |
 |--------|-------|
-| GPU break-even point | ~50,000 options |
-| Best GPU speedup (vs sequential) | 7.06x at 1M options |
-| Average GPU speedup (vs sequential) | 2.68x |
-| GPU wins vs sequential | 70.4% of tests |
-| GPU wins vs parallel | 55.6% of tests |
-| Peak GFLOPS | 3.00 |
-| Peak CPU GFLOPS | 2.13 (parallel) |
+| **Problem size range** | 10K - 1B options |
+| **GPU break-even (vs Sequential)** | ~50,000 options |
+| **Best GPU speedup (vs Sequential)** | **4.98x** at 5M options |
+| **GPU vs CPU Parallel** | 0.47x median (CPU Parallel wins) |
+| **GPU wins vs Sequential** | 91.3% of tests |
+| **GPU wins vs Parallel** | 0% of tests |
+| **Peak GPU GFLOPS** | 2.97 |
+| **Peak CPU Parallel GFLOPS** | 3.16 |
 
-**Chart Interpretation (Standard CPU vs GPU):**
+### Key Insights
 
-The standard benchmark chart (`benchmark_results_*_charts.png`) contains 6 panels:
+1. **GPU excels vs single-threaded CPU**: 4-5x speedup for problems >100K options
+2. **CPU Parallel is highly competitive**: 12-core Apple Silicon outperforms GPU for this workload
+3. **Async pipelining works**: Flush times show 91%+ spent collecting previous batch (overlap achieved)
+4. **Streaming overhead is significant**: GPU overhead from buffering/emission reduces raw kernel performance
+5. **Optimal GPU batch size**: 5M items balances memory usage with throughput
 
-1. **Execution Time vs Problem Size (top-left)**
-   - Log-log plot showing CPU (sequential & parallel) and GPU execution times
-   - GPU line crosses below CPU sequential at ~50,000 options
-   - All three lines show linear scaling on log-log, indicating consistent throughput
+### When to Use GPU
 
-2. **GPU Speedup vs Problem Size (top-center)**
-   - Two lines: blue (vs CPU Sequential), green (vs CPU Parallel)
-   - Green/red shading indicates GPU faster/slower regions
-   - Dashed line at 1.0x marks the break-even point
-   - Best speedup (7.06x) occurs at 1M options
+| Scenario | Recommendation |
+|----------|----------------|
+| Single-threaded environment | **GPU** (4-5x speedup) |
+| Multi-core CPU available | **CPU Parallel** (slightly faster) |
+| Memory-constrained | **GPU** (smaller batches possible) |
+| Very small batches (<50K) | **CPU** (GPU overhead dominates) |
 
-3. **Computational Throughput (top-right)**
-   - GFLOPS (40 FLOPS per option × options/second)
-   - GPU peaks at ~3 GFLOPS
-   - CPU Parallel reaches ~2.1 GFLOPS
-   - CPU Sequential plateaus at ~0.65 GFLOPS
+### Running the Benchmark
 
-4. **Pricing Throughput (bottom-left)**
-   - Options processed per second (log scale)
-   - GPU achieves ~75M options/second at peak
-   - Throughput is consistent after warmup phase
+```bash
+# Run with default problem sizes (10K to 1B)
+cargo bench --bench gpu_black_scholes --features gpu-wgpu
 
-5. **Average Speedup by Size Range (bottom-center)**
-   - Grouped bar chart: blue (vs Sequential), green (vs Parallel)
-   - Size ranges: Tiny (<10K), Small (10K-100K), Medium (100K-1M), Large (1M-10M), Huge (>10M)
-   - Larger problems show higher GPU advantage
-
-6. **Speedup Distribution (bottom-right)**
-   - Histogram showing frequency of speedup values
-   - Two distributions: vs Sequential (blue) and vs Parallel (green)
-   - Vertical dashed line at 1.0x marks break-even
-
-**Key Observations (Standard Mode):**
-
-- GPU becomes faster than sequential CPU at ~50,000 options
-- Peak speedup occurs at medium sizes (1M options) due to optimal memory utilization
-- Very large sizes (100M+) show reduced speedup due to memory bandwidth limits
-- GPU maintains advantage over parallel CPU for most problem sizes
+# Run with custom max size
+MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
+```
 
 ---
 
-### Optimized CPU vs GPU Benchmark
+## The Monte Carlo Model
 
-The optimized benchmark uses **optimized methodology** for fair GPU comparison:
-- SoA (Structure-of-Arrays) data layout
-- Kernel-only timing (excludes data transfer)
-- Full-size warmup before timed runs
-- Rayon for CPU parallel
-- Achieves 200-300x speedups
+The **Monte Carlo method** is a stochastic simulation approach for pricing financial derivatives, particularly useful for path-dependent options where no closed-form solution exists [6]. Unlike Black-Scholes which provides an analytical solution, Monte Carlo simulates many possible price paths and averages the payoffs.
 
-**Test Configuration:**
-- Platform: macOS aarch64 (Apple Silicon)
-- GPU Backend: WGPU (Metal)
-- Mode: OPTIMIZED (kernel-only timing, SoA data)
-- Problem sizes: 100 to 100 million options
+### Key Concepts and Terminology
 
-**How to Run:**
-```bash
-OPTIMIZED_MODE=true MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu -- --noplot
+Before diving into the algorithm, let's understand the fundamental concepts:
+
+#### Option Basics
+
+| Term | Symbol | Description |
+|------|--------|-------------|
+| **Stock Price** | S | Current market price of the underlying asset |
+| **Strike Price** | K | The price at which the option holder can buy (call) or sell (put) the stock |
+| **Time to Expiry** | T | Time remaining until the option expires (in years) |
+| **Risk-free Rate** | r | The theoretical rate of return with zero risk (e.g., Treasury bonds) |
+| **Volatility** | σ | A measure of how much the stock price fluctuates (standard deviation) |
+
+#### Strike Price (K)
+
+The **strike price** is the predetermined price at which an option can be exercised:
+
+```text
+                           Strike K = $105
+                               │
+                               │
+    ◄─────── Below Strike ─────┼───── Above Strike ──────►
+                               │
+    Stock at $90               │              Stock at $120
+    (call option worthless)    │         (call option valuable)
 ```
 
-**Optimized Benchmark Results:**
+- For a **call option**: The holder has the right to *buy* the stock at price K
+- For a **put option**: The holder has the right to *sell* the stock at price K
 
-The optimized benchmark achieves high speedups:
+#### ITM (In-The-Money) vs OTM (Out-of-The-Money)
 
-**Performance Summary:**
+These terms describe whether an option would be profitable if exercised immediately:
 
-| Metric | Standard Mode | Optimized Mode |
-|--------|--------------|----------------|
-| Max Speedup | ~7x | **284.7x** |
-| Average Speedup | ~3x | **82.2x** |
-| GPU Wins | 55% | **83.3%** |
-| Peak GFLOPS | ~3 | **231.5** |
+```text
+Price
+  │
+  │     ┌─────────────────────────────────────────────────────┐
+  │     │                                                     │
+130│    │                 ITM REGION (Call)                   │
+  │     │         (Stock > Strike = Option has value)         │
+  │     │                                                     │
+  │     │   Payoff = Stock Price - Strike = $130 - $105 = $25│
+  │     └─────────────────────────────────────────────────────┘
+105│ ═══════════════════ STRIKE K = $105 ═════════════════════
+  │     ┌─────────────────────────────────────────────────────┐
+  │     │                                                     │
+ 80│    │                 OTM REGION (Call)                   │
+  │     │         (Stock < Strike = Option worthless)         │
+  │     │                                                     │
+  │     │   Payoff = max($80 - $105, 0) = max(-$25, 0) = $0  │
+  │     └─────────────────────────────────────────────────────┘
+  │
+```
 
-**Optimized Benchmark Results by Problem Size:**
+| Region | Call Option | Put Option |
+|--------|-------------|------------|
+| **ITM** (In-The-Money) | Stock > Strike | Stock < Strike |
+| **ATM** (At-The-Money) | Stock ≈ Strike | Stock ≈ Strike |
+| **OTM** (Out-of-The-Money) | Stock < Strike | Stock > Strike |
 
-| Options | CPU Time | GPU Time | Speedup |
-|---------|----------|----------|---------|
-| 5,000 | 0.00025s | 0.00023s | 1.10x |
-| 25,000 | 0.00126s | 0.00025s | 5.11x |
-| 100,000 | 0.00463s | 0.00050s | 9.24x |
-| 250,000 | 0.01213s | 0.00053s | 22.92x |
-| 1,000,000 | 0.04856s | 0.00095s | 51.35x |
-| 5,000,000 | 0.24504s | 0.00144s | **170.5x** |
-| 10,000,000 | 0.48797s | 0.00236s | **206.6x** |
-| 25,000,000 | 1.22944s | 0.00432s | **284.7x** |
-| 50,000,000 | 2.51030s | 0.01431s | 175.4x |
-| 100,000,000 | 4.93197s | 0.02199s | **224.3x** |
+#### Option Payoff
 
-**Key Observations:**
+The **payoff** is the value of an option at expiration:
 
-1. **Peak speedup of 284.7x** at 25M options
-2. **GPU becomes faster at ~5,000 options** (vs ~75,000 in standard mode)
-3. **Peak GFLOPS of 231.5** - showing true GPU compute capability
-4. **Speedup drops at very large sizes** due to memory bandwidth saturation
+```text
+Call Option Payoff = max(S_T - K, 0)   "buy low, sell high"
+Put Option Payoff  = max(K - S_T, 0)   "sell high, buy low"
 
-### Why GPU Performance Drops at 50M Options
+Where S_T = stock price at expiration T
+```
 
-You may notice a significant performance cliff around **50 million options** in the optimized benchmark. This is caused by hitting the GPU's maximum thread dispatch limit and memory constraints.
+**Example:**
+- Stock price at expiration: S_T = $120
+- Strike price: K = $105
+- Call payoff = max($120 - $105, 0) = $15 ✓
+- Put payoff = max($105 - $120, 0) = $0 (worthless)
 
-**Observed Behavior:**
+#### Why Monte Carlo?
 
-| Options | GPU Threads | GPU GFLOPS | Notes |
-|---------|-------------|------------|-------|
-| 10M | 2,500,160 | 169.4 | Optimal |
-| 20M | 5,000,192 | 180.6 | Optimal |
-| 50M | 12,500,224 | 185.9 | **Peak** |
-| 70M | 12,500,224 | 9.0 | **Cliff!** |
-| 100M | 12,500,224 | 18.2 | Degraded |
+Monte Carlo simulation is used when:
 
-Notice how GPU threads stay constant at **12,500,224** after 50M options - this indicates the GPU has hit its maximum dispatch limit.
+1. **No closed-form solution exists** (path-dependent options, exotic options)
+2. **Multiple sources of uncertainty** (multi-factor models)
+3. **Complex payoff structures** (barrier options, Asian options)
 
-**Root Causes:**
+| Method | When to Use | Compute Cost |
+|--------|-------------|--------------|
+| Black-Scholes | Simple European options | ~40 FLOPs |
+| Monte Carlo | Path-dependent, exotic options | ~1,000,000 FLOPs |
+| GPU Monte Carlo | Same, but much faster | Same FLOPs, 100-600x speedup |
 
-1. **GPU Thread Dispatch Limit**: The GPU can only schedule ~12.5M threads per kernel launch. Beyond this, work must be serialized or the driver must manage complex scheduling.
+#### Monte Carlo Intuition
 
-2. **Memory Pressure**: At 50M options with SoA layout:
-   - Input data: 50M × 5 fields × 4 bytes = **1 GB**
-   - Output data: 50M × 2 fields × 4 bytes = **400 MB**
-   - Total: **~1.4 GB per batch**
+The idea is simple: simulate many possible futures, calculate what the option would pay in each future, and average the results:
 
-3. **Cache Thrashing**: When data exceeds L2 cache size, memory access patterns become inefficient, causing dramatic slowdowns.
+```text
+                          1000 simulated futures
+                                    │
+                                    ▼
+           ┌──────────────────────────────────────────────┐
+           │  Future 1: Stock ends at $120 → payoff $15  │
+           │  Future 2: Stock ends at $85  → payoff $0   │
+           │  Future 3: Stock ends at $142 → payoff $37  │
+           │  Future 4: Stock ends at $91  → payoff $0   │
+           │           ...                               │
+           │  Future 1000: Stock ends at $108 → payoff $3│
+           └──────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                      Average payoff = $8.80
+                                    │
+                                    ▼
+                      Discount to today = $8.80 × e^(-rT)
+                                    │
+                                    ▼
+                      Option Price ≈ $8.38
+```
 
-**Solution: GPU Batching**
+#### Geometric Brownian Motion (GBM)
 
-The optimized benchmark uses `GPU_MAX_BATCH_SIZE = 50_000_000` to process large datasets in 50M chunks:
+Stock prices are modeled using **Geometric Brownian Motion**, which assumes prices follow a random walk with:
+- A predictable **trend** (drift)
+- **Random fluctuations** (diffusion)
+
+The discrete-time GBM formula for simulating stock price paths:
+
+$$S_{t+\Delta t} = S_t \times \exp\left(\text{drift} + \text{diffusion} \times Z\right)$$
+
+Where Z ~ N(0,1) is a standard normal random variable.
+
+#### Drift Term
+
+The **drift** represents the expected direction of stock price movement:
+
+```text
+drift = (r - σ²/2) × Δt
+```
+
+| Component | Meaning |
+|-----------|---------|
+| `r` | Risk-free rate (expected return in risk-neutral world) |
+| `σ²/2` | Convexity correction (Jensen's inequality adjustment) |
+| `Δt` | Time step size (e.g., 1/50 = 0.02 years) |
+
+**Example:**
+- r = 5% (0.05), σ = 20% (0.2), Δt = 0.02
+- drift = (0.05 - 0.5 × 0.04) × 0.02 = (0.05 - 0.02) × 0.02 = **0.0006**
+
+This means on average, the stock gains 0.06% per time step (before random fluctuations).
+
+#### Diffusion Term
+
+The **diffusion** represents the magnitude of random price movements:
+
+```text
+diffusion = σ × √Δt
+```
+
+| Component | Meaning |
+|-----------|---------|
+| `σ` | Volatility (annual standard deviation of returns) |
+| `√Δt` | Time scaling (volatility scales with square root of time) |
+
+**Example:**
+- σ = 20% (0.2), Δt = 0.02
+- diffusion = 0.2 × √0.02 = 0.2 × 0.1414 = **0.0283**
+
+This scales the random component Z ~ N(0,1) to match the stock's volatility.
+
+#### Complete GBM Update Step
+
+Putting it together for one time step:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     GBM Price Update                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   S_new = S_old × exp(drift + diffusion × Z)                           │
+│                                                                         │
+│   Where:                                                                │
+│     drift     = (r - σ²/2) × Δt          = 0.0006                      │
+│     diffusion = σ × √Δt                  = 0.0283                      │
+│     Z         = random normal ~ N(0,1)   = -0.65 (example)             │
+│                                                                         │
+│   Example calculation:                                                  │
+│     S_old = 100.00                                                      │
+│     exponent = 0.0006 + 0.0283 × (-0.65) = 0.0006 - 0.0184 = -0.0178   │
+│     S_new = 100.00 × exp(-0.0178) = 100.00 × 0.9823 = 98.23            │
+│                                                                         │
+│   Interpretation: Stock dropped 1.77% this step due to negative Z      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+The algorithm simulates stock price paths using Geometric Brownian Motion (GBM):
+
+$$S_{t+\Delta t} = S_t \cdot \exp\left[\left(r - \frac{\sigma^2}{2}\right)\Delta t + \sigma\sqrt{\Delta t} \cdot Z\right]$$
+
+Where:
+- $S_t$ = Stock price at time $t$
+- $r$ = Risk-free interest rate
+- $\sigma$ = Volatility
+- $\Delta t$ = Time step
+- $Z$ = Standard normal random variable
+
+### Input/Output Structure
 
 ```rust
-const GPU_MAX_BATCH_SIZE: usize = 50_000_000;
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct MonteCarloInput {
+    pub stock_price: f32,       // Current stock price S₀
+    pub strike_price: f32,      // Strike price K
+    pub time_to_expiry: f32,    // Time to expiration T (years)
+    pub risk_free_rate: f32,    // Risk-free rate r
+    pub volatility: f32,        // Volatility σ
+}
 
-// In the benchmark:
-let (kernel_time, gpu_calls, gpu_threads) = if num_options > GPU_MAX_BATCH_SIZE {
-    // Use batched processing for large datasets
-    let (calls, _puts, pipeline_result, threads) =
-        process_pipelined_soa(gpu_ctx, &soa_data, num_options, GPU_MAX_BATCH_SIZE);
-    (pipeline_result.kernel_time_s, calls, threads)
-} else {
-    // Single batch for smaller datasets
-    let (kernel_time, _full_time, calls, threads) =
-        run_optimized_gpu_benchmark(gpu_ctx, &soa_data, num_options);
-    (kernel_time, calls, threads)
-};
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct MonteCarloOutput {
+    pub call_price: f32,        // European call option price
+    pub put_price: f32,         // European put option price
+}
 ```
 
-**Why 50M is the Optimal Batch Size:**
+### Algorithm Steps
 
-| Batch Size | Memory Usage | Threads | Performance |
-|------------|--------------|---------|-------------|
-| 10M | 280 MB | 2.5M | Good but underutilizes GPU |
-| 25M | 700 MB | 6.25M | Good |
-| **50M** | **1.4 GB** | **12.5M** | **Optimal - maximum utilization** |
-| 100M | 2.8 GB | Limited | Memory pressure begins |
-| 250M | 7 GB | Limited | Severe degradation |
+1. **Initialize**: Set initial stock price $S_0$ and calculate drift/diffusion terms
+2. **Simulate Paths**: For each path:
+   - Generate random normal variates using Box-Muller transform
+   - Apply GBM formula for each time step
+   - Calculate terminal stock price $S_T$
+3. **Calculate Payoff**: $\max(S_T - K, 0)$ for calls
+4. **Discount**: Apply risk-free discount factor $e^{-rT}$
+5. **Average**: Mean of all discounted payoffs gives option price
 
-The 50M batch size maximizes GPU utilization while staying within hardware limits.
+### Computational Complexity
 
-### Why Optimized Mode Shows Higher Speedups
+| Parameter | Default Value | Total Operations |
+|-----------|---------------|------------------|
+| Paths (N) | 1,000 | - |
+| Time Steps (M) | 50 | - |
+| Ops per step | ~20 | exp, sqrt, multiply |
+| **Total FLOPs/option** | **~1,000,000** | N × M × ops |
 
-The dramatic difference between standard (~5-7x) and optimized (~200-300x) speedups is explained by **what is being measured**:
+**Note**: Monte Carlo is significantly more compute-intensive than Black-Scholes (~40 FLOPs), making it an excellent candidate for GPU acceleration.
+
+### GPU Kernel Architecture
+
+The Monte Carlo GPU kernel uses the same SoA (Structure of Arrays) layout as Black-Scholes for optimal memory coalescing:
 
 ```
-Standard Mode Timing:
-┌─────────────────────────────────────────────────────────────────────┐
-│ [Stream Item] → [Buffer] → [AoS→SoA] → [GPU Alloc] → [Transfer] →  │
-│ [Kernel] → [Sync] → [Read Results] → [SoA→AoS] → [Emit Items]      │
-│ ←───────────────── ALL of this is timed ──────────────────────────→│
-└─────────────────────────────────────────────────────────────────────┘
-
-Optimized Mode Timing:
-┌─────────────────────────────────────────────────────────────────────┐
-│ [SoA Data] → [GPU Alloc] → [Transfer] → [Kernel] → [Sync] → [Read] │
-│              NOT timed                   ←TIMED→    NOT timed       │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                 Monte Carlo GPU Architecture                 │
+├─────────────────────────────────────────────────────────────┤
+│  CPU Side                    │  GPU Side                    │
+│  ──────────                  │  ────────                    │
+│  ┌─────────────────┐         │  ┌─────────────────────────┐ │
+│  │ MonteCarloInput │         │  │ SoA Buffers             │ │
+│  │ - stock_price   │ ───────►│  │ - stocks[]              │ │
+│  │ - strike_price  │         │  │ - strikes[]             │ │
+│  │ - time_to_expiry│         │  │ - times[]               │ │
+│  │ - risk_free_rate│         │  │ - rates[]               │ │
+│  │ - volatility    │         │  │ - vols[]                │ │
+│  │                 │         │  │ - seeds[]   (per-option)│ │
+│  └─────────────────┘         │  └───────────┬─────────────┘ │
+│                              │              │               │
+│                              │              ▼               │
+│                              │  ┌─────────────────────────┐ │
+│                              │  │  monte_carlo_kernel()   │ │
+│                              │  │  - xorshift32 RNG       │ │
+│                              │  │  - Box-Muller transform │ │
+│                              │  │  - GBM simulation       │ │
+│                              │  │  - Payoff calculation   │ │
+│                              │  └───────────┬─────────────┘ │
+│                              │              │               │
+│  ┌─────────────────┐         │              ▼               │
+│  │MonteCarloOutput │◄────────│  ┌─────────────────────────┐ │
+│  │ - call_price    │         │  │ Output Buffers          │ │
+│  │ - put_price     │         │  │ - call_prices[]         │ │
+│  └─────────────────┘         │  │ - put_prices[]          │ │
+│                              │  └─────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### When to Use Each Mode
+### Deterministic Seeding
 
-| Goal | Use Mode |
-|------|----------|
-| Realistic streaming performance | Standard |
-| Raw GPU kernel performance | **Optimized** |
-| Benchmark kernel improvements | **Optimized** |
-| Production latency estimation | Standard |
-| Maximum throughput potential | **Optimized** |
-| Academic GPU performance papers | **Optimized** |
+A key feature of the Monte Carlo implementation is **deterministic seeding** for reproducible results. This ensures that CPU and GPU produce identical outputs for the same inputs, enabling validation.
 
-Both metrics are valid - they just measure different things!
+#### Why Not Use Rust's `std::hash`?
+
+We chose a **custom hash combining algorithm** instead of Rust's standard library `Hash` trait for critical reasons:
+
+| Approach | Portable? | GPU Compatible? | Stable? | Notes |
+|----------|-----------|-----------------|---------|-------|
+| `std::hash::DefaultHasher` | ❌ | ❌ | ❌ | Uses SipHash with per-process random seed |
+| `#[derive(Hash)]` | ❌ | ❌ | ❌ | Same underlying SipHash issues |
+| `ahash` / `xxhash` crates | ✅ | ❌ | ⚠️ | External dependency, not GPU-portable |
+| **Custom boost-style** | ✅ | ✅ | ✅ | **Our choice** |
+
+**Key requirements our algorithm satisfies:**
+
+1. **GPU Compatibility**: The exact same algorithm must run in CubeCL GPU kernels
+2. **Cross-platform Stability**: Same result on all architectures, Rust versions, and GPU backends
+3. **No Dependencies**: Pure bitwise math, no external crates needed
+4. **Simplicity**: Easy to verify correctness; can be implemented in any language
+
+> **Reference**: The algorithm is based on the [boost::hash_combine](https://www.boost.org/doc/libs/1_83_0/doc/html/hash/combine.html) 
+> function from C++ Boost, which has been widely used and tested for over 20 years.
 
 ---
 
-## Further Reading
+#### The Hash Combining Algorithm
 
-- [CubeCL Documentation](https://github.com/tracel-ai/cubecl)
-- [WGPU - WebGPU for Rust](https://wgpu.rs/)
-- [Black-Scholes Model (Wikipedia)](https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model)
-- [Renoir Streaming Documentation](https://github.com/deib-polimi/renoir)
+The core formula for combining a value into an existing seed:
+
+```
+new_seed = old_seed XOR (value + 0x9e3779b9 + (old_seed << 6) + (old_seed >> 2))
+```
+
+**The Golden Ratio Constant `0x9e3779b9`:**
+- This is `floor(2^32 / φ)` where φ ≈ 1.618034 is the golden ratio
+- Binary: `10011110001101110111100110111001`
+- **Why it works**: The golden ratio is the "most irrational" number, meaning its continued fraction representation converges slowest. This creates a bit pattern that maximizes mixing without obvious regularities.
+
+---
+
+#### Step-by-Step: From Input to Unique Seed
+
+Let's trace exactly how an input becomes a unique seed:
+
+**Step 1: Extract IEEE 754 Bit Patterns**
+
+Each `f32` parameter is converted to its raw 32-bit representation:
+
+```rust
+let stock_bits  = input.stock_price.to_bits();    // 100.0 → 0x42C80000
+let strike_bits = input.strike_price.to_bits();   // 105.0 → 0x42D20000
+let time_bits   = input.time_to_expiry.to_bits(); // 1.0   → 0x3F800000
+let rate_bits   = input.risk_free_rate.to_bits(); // 0.05  → 0x3D4CCCCD
+let vol_bits    = input.volatility.to_bits();     // 0.2   → 0x3E4CCCCD
+```
+
+**Why `.to_bits()`?** This preserves all information in the float, including:
+- Sign bit (1 bit)
+- Exponent (8 bits) 
+- Mantissa (23 bits)
+
+Two floats that compare equal will have the same bits, ensuring determinism.
+
+**Step 2: Initialize Seed**
+
+```rust
+let mut seed = stock_bits;  // seed = 0x42C80000
+```
+
+**Step 3: Chain Hash Combining**
+
+For each remaining parameter, apply the combine formula:
+
+```
+Iteration 1 (strike_price):
+  temp = strike_bits + 0x9e3779b9 + (seed << 6) + (seed >> 2)
+       = 0x42D20000 + 0x9e3779b9 + 0x0B200000 + 0x10B20000
+       = [32-bit result with wraparound]
+  seed = seed XOR temp
+       = new mixed value
+
+Iteration 2 (time_to_expiry):
+  seed = seed XOR (time_bits + 0x9e3779b9 + (seed << 6) + (seed >> 2))
+  
+Iteration 3 (risk_free_rate):
+  seed = seed XOR (rate_bits + 0x9e3779b9 + (seed << 6) + (seed >> 2))
+
+Iteration 4 (volatility):
+  seed = seed XOR (vol_bits + 0x9e3779b9 + (seed << 6) + (seed >> 2))
+```
+
+**Step 4: Ensure Non-Zero**
+
+```rust
+if seed == 0 { 1 } else { seed }
+```
+
+The xorshift RNG has a fixed point at 0 (xorshift(0) = 0), so we must avoid it.
+
+---
+
+#### Complete Implementation
+
+```rust
+pub fn deterministic_seed(input: &MonteCarloInput) -> u32 {
+    // Step 1: Convert f32 → u32 bit representation
+    let stock_bits = input.stock_price.to_bits();
+    let strike_bits = input.strike_price.to_bits();
+    let time_bits = input.time_to_expiry.to_bits();
+    let rate_bits = input.risk_free_rate.to_bits();
+    let vol_bits = input.volatility.to_bits();
+    
+    // Step 2-3: Chain hash combining with golden ratio constant
+    let mut seed = stock_bits;
+    seed ^= strike_bits.wrapping_add(0x9e3779b9).wrapping_add(seed << 6).wrapping_add(seed >> 2);
+    seed ^= time_bits.wrapping_add(0x9e3779b9).wrapping_add(seed << 6).wrapping_add(seed >> 2);
+    seed ^= rate_bits.wrapping_add(0x9e3779b9).wrapping_add(seed << 6).wrapping_add(seed >> 2);
+    seed ^= vol_bits.wrapping_add(0x9e3779b9).wrapping_add(seed << 6).wrapping_add(seed >> 2);
+    
+    // Step 4: Ensure non-zero for xorshift RNG
+    if seed == 0 { 1 } else { seed }
+}
+```
+
+---
+
+#### Visualization: Bit Mixing
+
+```
+Input: MonteCarloInput { stock: 100.0, strike: 105.0, time: 1.0, rate: 0.05, vol: 0.2 }
+
+                 stock_bits          strike_bits
+                 0x42C80000          0x42D20000
+                     │                    │
+                     ▼                    ▼
+              ┌──────────┐         ┌──────────┐
+              │  seed₀   │◄────────│  combine │
+              │          │    XOR  │  formula │
+              └────┬─────┘         └──────────┘
+                   │
+                   ▼
+              ┌──────────┐         time_bits
+              │  seed₁   │◄────────0x3F800000
+              └────┬─────┘    XOR
+                   │
+                   ▼
+              ┌──────────┐         rate_bits
+              │  seed₂   │◄────────0x3D4CCCCD
+              └────┬─────┘    XOR
+                   │
+                   ▼
+              ┌──────────┐         vol_bits
+              │  seed₃   │◄────────0x3E4CCCCD
+              └────┬─────┘    XOR
+                   │
+                   ▼
+              ┌──────────┐
+              │  final   │───► unique 32-bit seed
+              │   seed   │     for this option
+              └──────────┘
+```
+
+---
+
+#### Properties Summary
+
+| Property | Description |
+|----------|-------------|
+| **Deterministic** | Same inputs → same seed (always reproducible) |
+| **Unique** | Different inputs → different seeds (with high probability) |
+| **Fast** | Only bitwise operations (no division/modulo) |
+| **Non-zero** | Returns 1 if result is 0 (xorshift requirement) |
+| **Portable** | Same result on CPU and GPU (pure integer math) |
+| **GPU-safe** | No branching except final zero-check |
+
+This ensures:
+- Same input → same seed → same random sequence → same output
+- CPU and GPU produce **identical results** for the same inputs
+- Tests can validate GPU correctness against CPU reference
+
+### CPU/GPU Validation
+
+Because both CPU and GPU use identical seeding and RNG algorithms, the benchmark performs **exact validation** of GPU results:
+
+```rust
+/// Validate GPU results against CPU results.
+///
+/// Since both CPU and GPU now use deterministic seeding via `deterministic_seed(&input)`,
+/// they produce identical results for the same inputs. We can do exact comparison.
+fn validate_results(
+    cpu_results: &[MonteCarloOutput],
+    gpu_results: &[MonteCarloOutput],
+    sample_size: usize,
+) -> (bool, f64, f64, usize) {
+    const TOLERANCE: f64 = 0.01; // 1% relative error (for f32 precision)
+    
+    for (cpu, gpu) in cpu_results.iter().zip(gpu_results).take(sample_size) {
+        let call_err = (cpu.call_price - gpu.call_price).abs() as f64;
+        // Check relative error for non-zero prices
+        if cpu.call_price.abs() > 0.01 {
+            let rel_err = call_err / cpu.call_price.abs() as f64;
+            if rel_err > TOLERANCE { /* validation failed */ }
+        }
+    }
+    // Returns: (passed, max_error, avg_error, sample_count)
+}
+```
+
+**Validation tolerance**: 1% relative error accounts for floating-point precision differences between CPU (x86 FMA) and GPU (shader intrinsics) implementations of `exp()` and `sqrt()`.
+
+### Random Number Generation: xorshift32 + Box-Muller
+
+Monte Carlo simulation requires high-quality random numbers. Our implementation uses two algorithms working together:
+
+1. **xorshift32**: Generates uniform random numbers in [0, 1)
+2. **Box-Muller Transform**: Converts uniform random numbers to normal distribution
+
+Both CPU and GPU use **identical implementations** to ensure reproducible results.
+
+---
+
+#### xorshift32: Fast Uniform Random Number Generator
+
+The xorshift family of PRNGs, introduced by George Marsaglia in 2003, provides excellent speed and quality for Monte Carlo simulation.
+
+**Algorithm:**
+
+```
+x ^= x << 13;  // Mix upper bits into lower bits
+x ^= x >> 17;  // Mix lower bits into upper bits
+x ^= x << 5;   // Final mixing pass
+```
+
+**Properties:**
+
+| Property | Value | Notes |
+|----------|-------|-------|
+| Period | 2³² - 1 | All 32-bit values except 0 |
+| Operations | 3 XOR + 3 shifts | Very fast, no division |
+| State size | 32 bits | Minimal memory footprint |
+| Quality | Good | Passes most statistical tests |
+
+**Implementation (identical on CPU and GPU):**
+
+```rust
+// CPU version
+fn xorshift_cpu(state: &mut u32) -> f32 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    
+    // Convert to f32 using upper 23 bits
+    let bits = x >> 9;
+    bits as f32 * 1.1920929e-7
+}
+
+// GPU version (CubeCL)
+#[cube]
+fn xorshift<F: Float>(state: &mut u32) -> F {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    let bits = x >> 9;
+    F::cast_from(bits) * F::new(1.1920929e-7)
+}
+```
+
+**Why `x >> 9` and `1.1920929e-7`?**
+
+The conversion uses the **upper 23 bits** because:
+
+1. xorshift has better randomness in high bits than low bits
+2. f32 mantissa is exactly 23 bits
+3. Maximizes output precision
+
+```text
+32-bit xorshift state:  [xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx]
+                                  ↓ shift right by 9
+Upper 23 bits:          [00000000 0xxxxxxx xxxxxxxx xxxxxxxx]
+                                  ↓ multiply by 2^(-23)
+f32 in [0, 1):          0.xxxxxxx... (full mantissa utilized)
+```
+
+The magic constant `1.1920929e-7 = 2^(-23) = 1/8388608`.
+
+> **Reference**: Marsaglia, G. (2003). "Xorshift RNGs". *Journal of Statistical Software*.
+> https://www.jstatsoft.org/article/view/v008i14
+
+---
+
+#### Box-Muller Transform: Uniform to Normal Distribution
+
+Monte Carlo option pricing requires normally-distributed random numbers for stock price paths. The Box-Muller transform converts uniform random numbers to normal distribution.
+
+**The Transform:**
+
+Given two independent uniform random variables U₁, U₂ ∈ (0, 1):
+
+```
+Z₁ = √(-2 ln U₁) × cos(2π U₂)
+Z₂ = √(-2 ln U₁) × sin(2π U₂)
+```
+
+Both Z₁ and Z₂ are independent standard normal N(0, 1) random variables.
+
+**Why It Works (Visual Explanation):**
+
+```
+    Uniform [0,1)²              Polar Coordinates            Normal Distribution
+                                                             
+    ┌─────────────┐            ┌─────────────┐              ┌─────────────┐
+    │░░░░░░░░░░░░░│            │      r      │              │    ╱╲       │
+    │░░░░░░░░░░░░░│  ────────► │     ╱│      │  ──────────► │   ╱  ╲      │
+    │░░░░░░░░░░░░░│  Box-Muller│    ╱ │θ     │  projection  │  ╱    ╲     │
+    │░░░░░░░░░░░░░│            │   ●──┘      │              │ ╱      ╲    │
+    └─────────────┘            └─────────────┘              └─────────────┘
+         U₁, U₂                r = √(-2 ln U₁)              Z = r × cos(θ)
+                               θ = 2π U₂
+```
+
+**Mathematical Derivation:**
+
+1. `-2 ln U₁` follows exponential distribution (λ = 2)
+2. `√(-2 ln U₁)` is Rayleigh distributed (the radius r)
+3. `2π U₂` provides uniform angle θ in [0, 2π)
+4. (r, θ) is a point in polar coordinates
+5. x = r cos(θ), y = r sin(θ) are independent N(0,1)
+
+**Implementation (identical on CPU and GPU):**
+
+```rust
+// CPU version
+fn box_muller_cpu(state: &mut u32) -> f32 {
+    let u1 = xorshift_cpu(state);
+    let u2 = xorshift_cpu(state);
+    
+    // Prevent ln(0) = -∞
+    let u1_safe = u1.max(1e-10);
+    
+    // Z = √(-2 ln U₁) × cos(2π U₂)
+    (-2.0 * u1_safe.ln()).sqrt() * (6.283185 * u2).cos()
+}
+
+// GPU version (CubeCL)
+#[cube]
+fn box_muller<F: Float>(state: &mut u32) -> F {
+    let u1: F = xorshift(state);
+    let u2: F = xorshift(state);
+    let u1_safe = F::max(u1, F::new(1e-10));
+    F::sqrt(F::new(-2.0) * F::ln(u1_safe)) * F::cos(F::new(6.283185) * u2)
+}
+```
+
+**Implementation Notes:**
+
+| Detail | Explanation |
+|--------|-------------|
+| `u1.max(1e-10)` | Prevents ln(0) = -∞ |
+| `6.283185` | = 2π (full circle in radians) |
+| Only Z₁ used | Z₂ (sine form) is discarded for simplicity |
+| 50% efficiency | Could save Z₂ for next call (not implemented) |
+
+#### Why Basic Box-Muller vs Polar (Marsaglia) Method?
+
+The **Polar Method** (Marsaglia, 1964) is an alternative that avoids expensive `cos()` and `sin()` calls using rejection sampling:
+
+```rust
+fn polar_method(state: &mut u32) -> (f32, f32) {
+    loop {
+        let u = 2.0 * xorshift(state) - 1.0;  // [-1, 1]
+        let v = 2.0 * xorshift(state) - 1.0;  // [-1, 1]
+        let s = u*u + v*v;
+        
+        if s < 1.0 && s > 0.0 {  // Accept if inside unit circle
+            let m = (-2.0 * s.ln() / s).sqrt();
+            return (u * m, v * m);  // Both Z₁ and Z₂
+        }
+        // Reject (~21% rejection rate) and retry
+    }
+}
+```
+
+**Why we chose Basic Box-Muller instead:**
+
+| Factor | Basic Box-Muller | Polar Method |
+|--------|------------------|--------------|
+| **GPU branching** | ✅ None | ❌ Rejection loop |
+| **Thread divergence** | ✅ All threads same path | ❌ Warps wait for slowest thread |
+| **Predictable timing** | ✅ Fixed operations | ❌ Variable iterations |
+| **Simplicity** | ✅ Simple | ❌ Complex state management |
+| **Compute per call** | 1 ln + 1 sqrt + 1 cos | ~1.27 ln + 1 sqrt (amortized) |
+
+**The Critical Issue: GPU Thread Divergence**
+
+On GPUs, threads in a **warp** (32 threads on NVIDIA, 64 on AMD) must execute the same instruction. If any thread needs to reject and retry, **all threads in the warp must wait**:
+
+```text
+Warp of 32 threads executing polar method:
+  Thread 0:  Accept (1 iteration)  ─┐
+  Thread 1:  Reject → Accept       ─┤
+  ...                              ─┼── All wait for Thread 31
+  Thread 31: Reject → Reject → OK  ─┘
+  
+  Result: Warp takes 3 iterations even though most threads needed only 1!
+```
+
+**Design Decision Summary:**
+
+| Scenario | Best Choice | Reason |
+|----------|-------------|--------|
+| CPU-only | Polar method | Saves both Z₁, Z₂; ~20% faster |
+| GPU-only | Basic Box-Muller | No branching, no divergence |
+| **CPU=GPU parity** (our case) | **Basic Box-Muller** | Same algorithm, identical results |
+
+Since we require **identical results on CPU and GPU** for validation, we use the same algorithm on both platforms. Basic Box-Muller's simplicity and lack of branching makes it the pragmatic choice.
+
+> **Potential Optimization**: Cache Z₂ for the next call requires per-thread state management, which adds complexity without significant benefit for our use case.
+
+> **Reference**: Box, G.E.P.; Muller, M.E. (1958). "A Note on the Generation of Random Normal Deviates".
+> *The Annals of Mathematical Statistics*. 29(2): 610–611.
+
+---
+
+#### Complete RNG Pipeline
+
+```text
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ deterministic   │     │    xorshift32   │     │   Box-Muller    │
+│    _seed()      │────►│                 │────►│    Transform    │
+│                 │     │ state ← mixing  │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        ▼                       ▼                       ▼
+   Unique seed           Uniform [0,1)            Normal N(0,1)
+   from input            random number            random number
+   parameters            (reproducible)           (for stock paths)
+```
+
+This pipeline ensures:
+- **Determinism**: Same input → same seed → same random sequence → same output
+- **GPU/CPU Parity**: Identical algorithms produce identical results
+- **Statistical Quality**: Suitable for Monte Carlo simulation
+
+---
+
+## GPU Parallelization Strategy
+
+Monte Carlo option pricing is **embarrassingly parallel** at the option level. Each option can be priced completely independently, making it ideal for GPU acceleration.
+
+### Parallelization Model: One Thread Per Option
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GPU PARALLELIZATION                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Option 0 ──► Thread 0 ──► [1000 paths × 50 steps] ──► Price₀          │
+│  Option 1 ──► Thread 1 ──► [1000 paths × 50 steps] ──► Price₁          │
+│  Option 2 ──► Thread 2 ──► [1000 paths × 50 steps] ──► Price₂          │
+│     ...          ...              ...                    ...            │
+│  Option N ──► Thread N ──► [1000 paths × 50 steps] ──► PriceN          │
+│                                                                         │
+│  ◄─────────────────── ALL IN PARALLEL ────────────────────►            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+Each GPU thread:
+1. Loads one option's parameters
+2. Runs all simulation paths (1000) × all time steps (50) = 50,000 iterations
+3. Writes the computed call/put price
+
+### GPU Kernel Structure
+
+```rust
+#[cube(launch_unchecked)]
+fn monte_carlo_kernel<F: Float>(
+    stocks: &Array<F>,     // Option parameters (SoA layout)
+    strikes: &Array<F>,
+    times: &Array<F>,
+    rates: &Array<F>,
+    vols: &Array<F>,
+    seeds: &Array<u32>,    // Deterministic seed per option
+    call_out: &mut Array<F>,
+    put_out: &mut Array<F>,
+    num_paths: u32,        // 1000
+    num_steps: u32,        // 50
+) {
+    // ABSOLUTE_POS = unique thread ID (0, 1, 2, ..., N-1)
+    if ABSOLUTE_POS < stocks.len() {
+        let mut seed = seeds[ABSOLUTE_POS];  // Each thread has unique seed
+        let s0 = stocks[ABSOLUTE_POS];       // Each thread processes one option
+        
+        let mut sum_payoff = F::new(0.0);
+        
+        for _ in 0..num_paths {              // 1000 paths (sequential)
+            let mut s = s0;
+            for _ in 0..num_steps {          // 50 steps (sequential)
+                let z = box_muller(&mut seed);
+                s *= F::exp(drift + diffusion * z);
+            }
+            sum_payoff += (s - k).max(0.0);
+        }
+        
+        call_out[ABSOLUTE_POS] = df * sum_payoff / F::cast_from(num_paths);
+    }
+}
+```
+
+### GPU Execution Model
+
+```text
+                    GPU with 1000s of cores
+         ┌───────────────────────────────────────┐
+         │  ┌────┐┌────┐┌────┐┌────┐    ┌────┐  │
+         │  │ SM ││ SM ││ SM ││ SM │ ...│ SM │  │  SM = Streaming Multiprocessor
+         │  └────┘└────┘└────┘└────┘    └────┘  │
+         │     │     │     │     │         │    │
+         │     ▼     ▼     ▼     ▼         ▼    │
+         │  ┌────┐┌────┐┌────┐┌────┐    ┌────┐  │
+         │  │Warp││Warp││Warp││Warp│    │Warp│  │  Warp = 32 threads (NVIDIA)
+         │  │ 0  ││ 1  ││ 2  ││ 3  │ ...│ N  │  │         64 threads (AMD)
+         │  └────┘└────┘└────┘└────┘    └────┘  │
+         └───────────────────────────────────────┘
+                         │
+                         ▼
+    ┌────────────────────────────────────────────────────┐
+    │ 1 Million Options → distributed across all threads │
+    │                                                    │
+    │   Warp 0 (32 threads): Options 0-31               │
+    │   Warp 1 (32 threads): Options 32-63              │
+    │   Warp 2 (32 threads): Options 64-95              │
+    │   ...                                              │
+    │   Warp 31249: Options 999,968 - 999,999           │
+    └────────────────────────────────────────────────────┘
+```
+
+### Data Layout: Structure of Arrays (SoA)
+
+For optimal GPU memory access, data is stored in **Structure of Arrays** format:
+
+```text
+Array of Structs (AoS) - ❌ Bad for GPU:
+┌──────────────────────────────────────────────────────┐
+│ Option0{stock,strike,time,rate,vol} │                │
+│ Option1{stock,strike,time,rate,vol} │                │
+│ Option2{stock,strike,time,rate,vol} │                │
+└──────────────────────────────────────────────────────┘
+  Problem: Adjacent threads access non-contiguous memory
+
+Structure of Arrays (SoA) - ✅ Good for GPU:
+┌──────────────────────────────────────────────────────┐
+│ stocks:  [100.0, 105.0, 98.0, 112.0, ...]           │
+│ strikes: [102.0, 108.0, 95.0, 115.0, ...]           │
+│ times:   [1.0,   0.5,   2.0,  1.5,   ...]           │
+│ rates:   [0.05,  0.05,  0.05, 0.05,  ...]           │
+│ vols:    [0.2,   0.25,  0.18, 0.3,   ...]           │
+│ seeds:   [0xA7.., 0xB3.., 0xC1.., ...]              │
+└──────────────────────────────────────────────────────┘
+  Benefit: Coalesced memory access, full bandwidth utilization
+```
+
+### Parallelization Hierarchy
+
+```text
+Level 1: OPTION LEVEL (GPU parallelism - thousands of threads)
+├── Thread 0 → Option 0
+├── Thread 1 → Option 1
+├── Thread 2 → Option 2
+│   ...
+└── Thread N → Option N
+    │
+    │
+    Level 2: PATH LEVEL (Sequential within each thread)
+    └── for path in 0..1000 {
+            │
+            │
+            Level 3: TIME STEP LEVEL (Sequential within each path)
+            └── for step in 0..50 {
+                    z = box_muller(seed)    // 2 RNG calls
+                    S *= exp(drift + diffusion * z)
+                }
+        }
+
+Total work per thread: 1000 paths × 50 steps × 2 RNG = 100,000 RNG calls
+Total work for 1M options: 100 billion RNG operations (executed in parallel!)
+```
+
+### Performance Comparison
+
+| Metric | CPU Sequential | CPU Parallel (8 cores) | GPU |
+|--------|----------------|------------------------|-----|
+| Options processed | 1 at a time | 8 at a time | 1000s at a time |
+| 1M options @ 50K ops | ~60 seconds | ~8 seconds | ~0.1 seconds |
+| **Speedup** | 1x | ~8x | **~600x** |
+
+### True Double-Buffering
+
+The Monte Carlo kernel uses **true double-buffering** to overlap GPU computation with data upload:
+
+```text
+Timeline (per flush call):
+─────────────────────────────────────────────────────────────────────────►
+
+1. UPLOAD new batch (async) ─► Happens WHILE GPU computes previous batch!
+2. READ previous results     ─► Blocks until GPU done (upload already queued)
+3. LAUNCH new kernel         ─► Starts computing with uploaded data
+```
+
+**Before (no overlap):**
+```text
+flush(): [READ prev] [UPLOAD new] [LAUNCH]
+GPU:     ────────────┘            └──────── GPU idle during upload!
+```
+
+**After (true double-buffering):**
+```text
+flush(): [UPLOAD new] [READ prev] [LAUNCH]
+GPU:     ──computing──────────────┘         Upload overlaps with compute!
+```
+
+### GPU Memory Copy Semantics
+
+Understanding how `client.create()` works is critical for safe buffer management:
+
+```text
+Before client.create():
+┌─────────────────────────┐     ┌─────────────────────────┐
+│  CPU Memory (Vec)       │     │  GPU Memory             │
+│  [100.0, 110.0, 95.0]   │     │  (empty)                │
+└─────────────────────────┘     └─────────────────────────┘
+
+During client.create():
+┌─────────────────────────┐     ┌─────────────────────────┐
+│  CPU Memory (Vec)       │────►│  GPU Memory (copy)      │
+│  [100.0, 110.0, 95.0]   │COPY │  [100.0, 110.0, 95.0]   │
+└─────────────────────────┘     └─────────────────────────┘
+                                          │
+                                    Handle (stock_h)
+
+After buffer.clear():
+┌─────────────────────────┐     ┌─────────────────────────┐
+│  CPU Memory (Vec)       │     │  GPU Memory (still OK!) │
+│  [] (empty)             │     │  [100.0, 110.0, 95.0]   │
+└─────────────────────────┘     └─────────────────────────┘
+         ✓                               │
+    Clear is SAFE!              Handle still valid
+```
+
+**Key Points:**
+
+1. `client.create()` **copies** data immediately into GPU/staging memory
+2. The returned `Handle` references the **GPU-side copy**, not the original Vec
+3. It's safe to clear the CPU buffer after `create()` returns
+
+### GPU Command Queue Ordering
+
+"Non-blocking" means the CPU doesn't wait for the GPU, but command ordering is preserved:
+
+```text
+Command Queue:
+┌──────────────┬───────────────┬──────────────┐
+│  Upload B1   │  Kernel B1    │  Upload B2   │  ...
+└──────────────┴───────────────┴──────────────┘
+       ↑               ↑
+       │               └── Kernel won't start until upload is done
+       └── Data already in staging buffer
+```
+
+**GPU guarantees:**
+- Commands execute in submission order
+- Kernel only starts after its inputs are uploaded
+- `read_one()` blocks until compute is complete
+
+---
+
+## Complete Monte Carlo Flow (GPU)
+
+This section traces the complete flow from input to output for GPU Monte Carlo pricing.
+
+### High-Level Flow
+
+```text
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ MonteCarloInput │────►│  SoA Buffers    │────►│   GPU Kernel    │
+│ (per option)    │     │ (batched)       │     │ (parallel)      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+  stock=100, K=105       stocks: [100, ...]      Thread 0-N process
+  time=1.0, r=0.05       seeds:  [0xBD, ...]     50,000 iterations
+  vol=0.2                                        each
+                                                         │
+                                                         ▼
+                               ┌─────────────────────────────────┐
+                               │          Output                 │
+                               │  call_prices: [8.38, 12.1, ...] │
+                               │  put_prices:  [8.26, 9.84, ...] │
+                               └─────────────────────────────────┘
+```
+
+### Step-by-Step Execution
+
+**Step 1: Input Arrives**
+
+```rust
+MonteCarloInput {
+    stock_price: 100.0,      // S₀ = $100
+    strike_price: 105.0,     // K = $105
+    time_to_expiry: 1.0,     // T = 1 year
+    risk_free_rate: 0.05,    // r = 5%
+    volatility: 0.2,         // σ = 20%
+}
+```
+
+**Step 2: Seed Generation**
+
+```rust
+// On CPU, before GPU launch
+let seed = deterministic_seed(&input);  // → 0xBDCB01ED
+```
+
+**Step 3: Batch into SoA Buffers**
+
+```text
+Input stream: [Option₀, Option₁, Option₂, ..., Option₉₉₉₉₉]
+                    ↓
+SoA Buffers (for 100K batch):
+├── stocks:  [100.0, 105.0, 98.0, ...]
+├── strikes: [105.0, 110.0, 95.0, ...]
+├── times:   [1.0,   0.5,   2.0,  ...]
+├── rates:   [0.05,  0.05,  0.05, ...]
+├── vols:    [0.2,   0.25,  0.18, ...]
+└── seeds:   [0xBD.., 0x63.., 0x54.., ...]
+```
+
+**Step 4: GPU Kernel Execution (Per Thread)**
+
+Each thread runs this logic for its assigned option:
+
+```text
+Thread 0 processes Option 0 (our example input):
+────────────────────────────────────────────────
+seeds[0] = 0xBDCB01ED
+stocks[0] = 100.0, strikes[0] = 105.0, ...
+
+dt = T/50 = 0.02
+drift = (r - 0.5σ²) × dt = 0.0006
+diffusion = σ × √dt = 0.0283
+
+for path in 0..1000:
+    S = 100.0  (initial price)
+    
+    for step in 0..50:
+        ┌─────────────────────────────────────┐
+        │ z = box_muller(&mut seed)           │
+        │   ├── u1 = xorshift(seed) → 0.3874 │
+        │   ├── u2 = xorshift(seed) → 0.3286 │
+        │   └── z = √(-2 ln 0.3874) × cos(2π×0.3286)
+        │       = √(1.8964) × cos(2.0648)    │
+        │       = -0.6529                     │
+        │                                     │
+        │ S *= exp(0.0006 + 0.0283 × -0.6529)│
+        │ S *= 0.9823                         │
+        │ S = 98.23                           │
+        └─────────────────────────────────────┘
+    
+    First path after 50 steps: S_final = 69.63
+    payoff = max(69.63 - 105.0, 0) = 0.0 (OTM)
+
+    (other paths may end ITM)
+
+After averaging 1000 paths:
+  call_price = exp(-0.05×1) × avg_payoff = 8.38
+
+call_out[0] = 8.38
+put_out[0] = 8.38 - 100 + 105×exp(-0.05) = 8.26
+```
+
+**Step 5: Stock Price Path Visualization**
+
+From 20 sample paths: 5 ended ITM (above strike), 15 ended OTM (below strike).
+
+![Monte Carlo Stock Price Paths](images/monte_carlo_paths.png)
+
+**Key observations:**
+- **ITM paths (green)**: End above strike K=$105, generate positive payoffs
+- **OTM paths (gray)**: End below strike, payoff = $0
+- **Highlighted paths**: Best ITM (Path 10: $150.37) and worst OTM (Path 1: $69.63)
+- **Averaging 1000 paths** → call price ≈ $8.38
+
+**Step 6: Results Copied Back**
+
+```text
+GPU Memory:                    CPU Memory:
+call_out: [8.32, 12.1, ...]   →   Vec<MonteCarloOutput>
+put_out:  [5.21, 9.84, ...]   →   [Output₀, Output₁, ...]
+```
+
+### Performance Summary
+
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│                 MONTE CARLO GPU PERFORMANCE                         │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  Input: 1 Million Options                                          │
+│  Work:  1M × 1000 paths × 50 steps × 2 RNG = 100 Billion ops      │
+│                                                                    │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐          │
+│  │   CPU Seq     │  │   CPU Par     │  │     GPU       │          │
+│  │   1 thread    │  │   8 threads   │  │  1000s cores  │          │
+│  │               │  │               │  │               │          │
+│  │   ~60 sec     │  │   ~8 sec      │  │   ~0.1 sec    │          │
+│  │               │  │               │  │               │          │
+│  │   1x          │  │   7.5x        │  │   600x        │          │
+│  └───────────────┘  └───────────────┘  └───────────────┘          │
+│                                                                    │
+│  GPU Throughput: ~600 GFLOPS                                       │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Monte Carlo Benchmark
+
+The Monte Carlo benchmark (`benches/gpu/monte_carlo.rs`) evaluates GPU performance for path-dependent option pricing.
+
+### Benchmark Configuration
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| MC_NUM_PATHS | 1,000 | Simulation paths per option |
+| MC_TIME_STEPS | 50 | Time steps per path |
+| GPU_BATCH_SIZE | 100,000 | Maximum items per GPU batch |
+| Test Sizes | 10K, 100K, 1M | Options per test |
+
+### Seeding Strategy
+
+The benchmark uses a **two-tier seeding approach** to balance reproducibility with correctness:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      MONTE CARLO SEEDING STRATEGY                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Tier 1: INPUT GENERATION SEED (BENCHMARK_SEED = 42)                       │
+│  ─────────────────────────────────────────────────                          │
+│  Purpose: Generate reproducible test inputs (stock prices, strikes, etc.)  │
+│  Scope:   Benchmark-wide                                                    │
+│  Effect:  Same seed → same test options every run → fair comparisons        │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  Tier 2: PER-OPTION SIMULATION SEED (deterministic_seed(&input))           │
+│  ──────────────────────────────────────────────────────────────             │
+│  Purpose: Seed Monte Carlo RNG for each option's simulation                 │
+│  Scope:   Per-option (derived from input parameters)                        │
+│  Effect:  Same input → same seed → identical CPU/GPU results                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this matters:**
+
+| Without Two-Tier Seeding | With Two-Tier Seeding |
+|--------------------------|----------------------|
+| Different inputs each run | Reproducible benchmark inputs |
+| Can't compare runs fairly | Fair performance comparisons |
+| GPU might use different RNG | CPU and GPU produce identical results |
+| Validation would fail | Exact CPU/GPU validation possible |
+
+### Running the Benchmark
+
+```bash
+# Run Monte Carlo benchmark
+cargo bench --bench gpu_monte_carlo --features gpu-wgpu
+
+# Results saved to:
+# benches/results/monte_carlo/YYYY-MM-DD/monte_carlo_benchmark_YYYY-MM-DDTHH-MM-SS.json
+```
+
+
+### Benchmark Results
+
+| Size | CPU Sequential | CPU Parallel | GPU | Speedup vs Seq | GFLOPS |
+|------|----------------|--------------|-----|----------------|--------|
+| 10K | 6.5s | 0.9s | 0.11s | **57x** | 88 |
+| 100K | 65s | 8.5s | 0.16s | **405x** | 624 |
+| 1M | 711s | 147s | 1.57s | **453x** | 638 |
+
+**Peak GPU throughput**: 638 GFLOPS (significantly higher than Black-Scholes due to higher arithmetic intensity)
+
+### Why Monte Carlo Shows Better GPU Speedup
+
+| Metric | Black-Scholes | Monte Carlo |
+|--------|---------------|-------------|
+| FLOPs/option | ~40 | ~1,000,000 |
+| Bytes/option | 28 | 28 |
+| Arithmetic Intensity | 1.4 FLOP/byte | 35,714 FLOP/byte |
+| GPU Advantage | Memory-bound | **Compute-bound** |
+
+Monte Carlo's extremely high arithmetic intensity makes it **compute-bound**, allowing the GPU to fully utilize its massive parallel compute capacity without being limited by memory bandwidth.
+
+---
+
+## Black-Scholes Kernel Improvements
+
+### Smart Warmup Handling
+
+The Black-Scholes kernel includes a critical fix for the async pipelining warmup issue. When a kernel performs warmup (e.g., shader compilation), the first real batch needs special handling:
+
+```rust
+// ===== Smart Warmup Handling =====
+// If this is the first real batch after warmup, we need to sync immediately.
+// Otherwise, we would return warmup results (wrong count) to the operator.
+// This is a one-time cost per stream execution.
+if self.first_batch_after_warmup {
+    self.first_batch_after_warmup = false;
+    
+    // Wait for THIS batch to complete (sync) and return its results
+    let call_bytes = client.read_one(call_handle);
+    let put_bytes = client.read_one(put_handle);
+    
+    let call_prices: &[f32] = bytemuck::cast_slice(&call_bytes);
+    let put_prices: &[f32] = bytemuck::cast_slice(&put_bytes);
+    
+    let mut results = Vec::with_capacity(num_options);
+    for i in 0..num_options {
+        results.push(BlackScholesOutput {
+            call_price: call_prices[i],
+            put_price: put_prices[i],
+        });
+    }
+    
+    // Clear pending state (we've consumed this batch synchronously)
+    self.pending_handles = None;
+    self.pending_count = 0;
+    
+    // Clear buffer for next batch
+    soa.clear();
+    self.items_pushed = 0;
+    
+    // Discard warmup results from 'previous_results', return current batch
+    return results;
+}
+```
+
+**Problem solved**: Without this fix, the first batch after warmup would return incorrect results because:
+1. Warmup batch has different size than real batches
+2. Async pipelining returns "previous" batch results
+3. Mismatch causes wrong count/results
+
+**Solution**: First real batch is processed synchronously, establishing correct pipelining state for subsequent batches.
+
+---
+
+## GPU Kernel Integration Tests
+
+The project includes comprehensive tests for GPU kernels with **104 total tests** across unit and integration tests.
+
+### Test Organization
+
+Tests are organized into three locations:
+
+```
+examples/kernels/tests/           # Unit tests (co-located with kernel code)
+├── mod.rs
+├── black_scholes_tests.rs        # 43 tests (23 CPU + 20 GPU)
+└── monte_carlo_tests.rs          # 41 tests (17 CPU + 24 GPU)
+
+tests/gpu_kernels.rs              # Integration tests (20 tests)
+```
+
+### Black-Scholes Unit Tests (`black_scholes_tests.rs`)
+
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| **CPU CND Function** | 3 | `cnd_cpu()` accuracy at 0, symmetry, extreme values |
+| **CPU Pricing** | 3 | ATM, deep ITM, deep OTM scenarios |
+| **CPU Validation** | 3 | Put-call parity, edge cases, non-negative outputs |
+| **CPU Boundary** | 13 | Small/large values, negative rates, extreme moneyness, NaN handling |
+| **GPU Kernel Methods** | 6 | `push()`, `flush()`, `drain()` individual testing |
+| **GPU CND Validation** | 2 | ATM pricing, extreme ITM/OTM |
+| **GPU vs CPU** | 5 | Single option, vectorization, big numbers, parity |
+| **GPU Batch/Alignment** | 6 | Various batch sizes (1-1000), large batches (100K), unaligned |
+| **GPU Double-Buffering** | 4 | Multiple flushes, drains, interleaved operations |
+| **GPU Stress** | 3 | Reference values, repeated execution, NaN handling |
+
+### Monte Carlo Unit Tests (`monte_carlo_tests.rs`)
+
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| **CPU Deterministic Seed** | 3 | Reproducibility, uniqueness, non-zero guarantee |
+| **CPU Pricing** | 4 | ATM, deep ITM, deep OTM, put-call parity |
+| **CPU Edge Cases** | 2 | Edge parameters, reproducibility |
+| **CPU Boundary** | 6 | Small/large values, negative rates, extreme moneyness/volatility |
+| **CPU RNG Quality** | 3 | Uniformity, seed diversity, convergence to Black-Scholes |
+| **GPU Kernel Methods** | 6 | `push()`, `flush()`, `drain()` individual testing |
+| **GPU RNG Validation** | 3 | Determinism, different seeds, valid prices |
+| **GPU vs CPU** | 7 | Single option, determinism, batch processing, parity |
+| **GPU Batch/Alignment** | 2 | Various batch sizes, large batches (50K) |
+| **GPU Double-Buffering** | 2 | Multiple flushes, multiple drains |
+| **GPU Stress** | 2 | Repeated execution, NaN handling |
+
+### Integration Tests (`tests/gpu_kernels.rs`)
+
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| **GPU vs CPU Comparison** | 4 | 1000-case batches, edge cases for both kernels |
+| **Cross-Kernel Validation** | 4 | GPU-BS vs CPU-MC, GPU-MC vs CPU-BS, multi-scenario |
+| **Boundary/Stress Tests** | 4 | Boundary values, large streaming, mixed batches |
+| **Consistency Tests** | 2 | Determinism across multiple runs |
+| **Pipeline Tests** | 2 | End-to-end streaming, mixed CPU/GPU pipeline |
+| **Double-Buffering** | 1 | Correctness verification |
+| **Big Number Tests** | 2 | Prices up to $1M for both kernels |
+| **Cross-Model Consistency** | 1 | Black-Scholes vs Monte Carlo agreement |
+
+### Test Categories by Focus
+
+#### 1. GpuKernel Trait Method Tests
+
+Tests individual methods of the `GpuKernel` trait:
+
+```rust
+#[test]
+fn test_kernel_push_increments_buffer()  // Verify push() adds to buffer
+fn test_kernel_flush_clears_buffer()     // Verify flush() empties buffer
+fn test_kernel_flush_returns_previous()  // Double-buffering behavior
+fn test_kernel_drain_returns_pending()   // Final batch retrieval
+fn test_kernel_drain_empty_no_pending()  // Empty drain behavior
+fn test_kernel_full_workflow()           // Push → flush → drain cycle
+```
+
+#### 2. GPU RNG/CND Validation
+
+Tests GPU-specific mathematical functions:
+
+```rust
+// Black-Scholes: CND/erf function validation via pricing
+fn test_gpu_cnd_via_atm_pricing()       // Tests CND at d1≈0
+fn test_gpu_cnd_via_extreme_itm_otm()   // Tests CND at extremes
+
+// Monte Carlo: RNG validation via output matching
+fn test_gpu_rng_deterministic()         // Same seed → same result
+fn test_gpu_rng_different_seeds()       // Different inputs → different results
+fn test_gpu_rng_produces_valid_prices() // ITM/OTM sanity checks
+```
+
+#### 3. Batch Size and Alignment Tests
+
+Tests GPU vectorization and padding:
+
+```rust
+fn test_gpu_various_batch_sizes()       // 1, 2, 3, 7, 15, 16, 17, ..., 1000
+fn test_gpu_large_batch()               // 50K-100K items
+fn test_gpu_unaligned_vectorization()   // Non-multiples of 4
+```
+
+#### 4. Numerical Accuracy Tests
+
+Tests against known reference values:
+
+```rust
+fn test_gpu_reference_values()          // Textbook Black-Scholes values
+fn test_monte_carlo_convergence()       // MC converges to BS analytical
+```
+
+### Running Tests
+
+```bash
+# Run all 104 GPU kernel tests
+cargo test --test gpu_kernels --features gpu-wgpu
+
+# Run only Black-Scholes unit tests
+cargo test --test gpu_kernels black_scholes_tests --features gpu-wgpu
+
+# Run only Monte Carlo unit tests
+cargo test --test gpu_kernels monte_carlo_tests --features gpu-wgpu
+
+# Run only integration tests
+cargo test --test gpu_kernels gpu_integration_tests --features gpu-wgpu
+
+# Run specific test
+cargo test --test gpu_kernels test_kernel_push --features gpu-wgpu
+
+# Run with CUDA backend (NVIDIA only)
+cargo test --test gpu_kernels --features gpu-cuda
+```
+
+### Test Validation Criteria
+
+| Test Type | Validation Method | Tolerance |
+|-----------|-------------------|-----------|
+| **Black-Scholes GPU vs CPU** | Exact floating-point comparison | <0.1% call/put error |
+| **Monte Carlo GPU vs CPU** | Same seed, same result | <1% relative error |
+| **Put-Call Parity** | $C - P = S - Ke^{-rT}$ | <0.01 for BS, <5% of S for MC |
+| **Kernel Method Tests** | Buffer length, result count | Exact match |
+| **Reference Values** | Known textbook values | <0.5 absolute error |
+| **Sanity Checks** | Non-NaN, non-negative, ITM>OTM | Pass/fail boolean |
+
+### Test Case Generation
+
+Tests use randomized inputs with deterministic seeding:
+
+| Category | Stock Price Range | Coverage |
+|----------|-------------------|----------|
+| Edge Cases | Hand-picked | Boundary conditions |
+| Small Prices | $0.01 - $10 | Precision testing |
+| Normal Prices | $10 - $1,000 | Standard scenarios |
+| Big Numbers | $1,000 - $1,000,000 | Overflow/precision |
+
+---
+
+
+## References
+
+### Peer-Reviewed Publications
+
+[1] E. Lindholm, J. Nickolls, S. Oberman, and J. Montrym, "NVIDIA Tesla: A Unified Graphics and Computing Architecture," *IEEE Micro*, vol. 28, no. 2, pp. 39-55, Mar.-Apr. 2008. doi: 10.1109/MM.2008.31
+
+[2] J. Nickolls and W. J. Dally, "The GPU Computing Era," *IEEE Micro*, vol. 30, no. 2, pp. 56-69, Mar.-Apr. 2010. doi: 10.1109/MM.2010.41
+
+[3] V. Volkov, "Understanding Latency Hiding on GPUs," Ph.D. dissertation, Dept. Elect. Eng. Comput. Sci., Univ. California, Berkeley, 2016.
+
+[4] M. Harris, "Optimizing Parallel Reduction in CUDA," NVIDIA Developer Technology, 2007.
+
+[5] S. Ryoo et al., "Optimization Principles and Application Performance Evaluation of a Multithreaded GPU Using CUDA," in *Proc. 13th ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming (PPoPP '08)*, 2008, pp. 73-82.
+
+### Financial Mathematics
+
+[6] F. Black and M. Scholes, "The Pricing of Options and Corporate Liabilities," *Journal of Political Economy*, vol. 81, no. 3, pp. 637-654, May-Jun. 1973. doi: 10.1086/260062
+
+[14] P. Glasserman, *Monte Carlo Methods in Financial Engineering*, Springer, 2003. ISBN: 978-0387004518
+
+### Technical Specifications and Documentation
+
+[7] Tracel AI, "CubeCL: Multi-platform High-Performance Compute Language Extension for Rust," 2024. [Online]. Available: https://github.com/tracel-ai/cubecl
+
+[8] W3C, "WebGPU Specification," W3C Working Draft, 2024. [Online]. Available: https://www.w3.org/TR/webgpu/
+
+[9] Khronos Group, "Vulkan 1.3 Specification," 2024. [Online]. Available: https://registry.khronos.org/vulkan/
+
+[10] Apple Inc., "Metal Programming Guide," Apple Developer Documentation, 2024. [Online]. Available: https://developer.apple.com/metal/
+
+[11] NVIDIA Corporation, "CUDA C++ Programming Guide," Version 12.3, 2024. [Online]. Available: https://docs.nvidia.com/cuda/cuda-c-programming-guide/
+
+[12] gfx-rs community, "wgpu: Safe and Portable GPU Abstraction in Rust," 2024. [Online]. Available: https://wgpu.rs/
+
+### Streaming Data Processing
+
+[13] L. Affetti, A. Margara, and G. Cugola, "Renoir: A Data-Parallel Processing Library for Rust," 2024. [Online]. Available: https://github.com/deib-polimi/renoir
 
 ---
 

@@ -107,5 +107,90 @@ impl GpuContext {
             "CUDA"
         }
     }
+    
+    /// Get GPU device information (name).
+    /// 
+    /// Returns the device name from the underlying GPU backend.
+    #[cfg(feature = "gpu-wgpu")]
+    pub fn device_name() -> String {
+        // Use platform-specific commands to get GPU info
+        #[cfg(target_os = "macos")]
+        {
+            use std::process::Command;
+            // macOS: use system_profiler to get GPU info
+            let output = Command::new("system_profiler")
+                .args(["SPDisplaysDataType", "-json"])
+                .output();
+            
+            if let Ok(output) = output {
+                if let Ok(json_str) = String::from_utf8(output.stdout) {
+                    // Try to extract chipset name from JSON
+                    // Look for "sppci_model" or "chipset_model" field
+                    if let Some(start) = json_str.find("\"sppci_model\"") {
+                        if let Some(colon) = json_str[start..].find(':') {
+                            let after_colon = &json_str[start + colon + 1..];
+                            if let Some(quote_start) = after_colon.find('"') {
+                                let after_quote = &after_colon[quote_start + 1..];
+                                if let Some(quote_end) = after_quote.find('"') {
+                                    return after_quote[..quote_end].to_string();
+                                }
+                            }
+                        }
+                    }
+                    // Fallback: look for chipset_model
+                    if let Some(start) = json_str.find("\"chipset_model\"") {
+                        if let Some(colon) = json_str[start..].find(':') {
+                            let after_colon = &json_str[start + colon + 1..];
+                            if let Some(quote_start) = after_colon.find('"') {
+                                let after_quote = &after_colon[quote_start + 1..];
+                                if let Some(quote_end) = after_quote.find('"') {
+                                    return after_quote[..quote_end].to_string();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "Apple GPU".to_string()
+        }
+        
+        #[cfg(target_os = "linux")]
+        {
+            use std::process::Command;
+            // Linux: use lspci to get GPU info
+            let output = Command::new("lspci")
+                .args(["-v"])
+                .output();
+            
+            if let Ok(output) = output {
+                if let Ok(text) = String::from_utf8(output.stdout) {
+                    for line in text.lines() {
+                        if line.contains("VGA") || line.contains("3D") {
+                            // Extract device name after the colon
+                            if let Some(colon) = line.find(':') {
+                                return line[colon + 1..].trim().to_string();
+                            }
+                        }
+                    }
+                }
+            }
+            "Unknown GPU".to_string()
+        }
+        
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            "Unknown GPU".to_string()
+        }
+    }
+    
+    #[cfg(all(feature = "gpu-cuda", not(feature = "gpu-wgpu")))]
+    pub fn device_name() -> String {
+        "CUDA Device".to_string()
+    }
+    
+    #[cfg(not(any(feature = "gpu-wgpu", feature = "gpu-cuda")))]
+    pub fn device_name() -> String {
+        "No GPU".to_string()
+    }
 }
 

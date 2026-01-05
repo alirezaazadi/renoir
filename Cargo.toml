@@ -183,38 +183,20 @@ name = "kafka"
 harness = false
 required-features = ["rdkafka"]
 
-[[example]]
-name = "black_scholes_gpu"
-required-features = ["gpu-wgpu"]
 
-[[example]]
-name = "gpu_batching_strategies"
-required-features = ["gpu-wgpu"]
+
 
 [[bench]]
-name = "gpu_black_scholes_standard"
-path = "benches/gpu_black_scholes/standard.rs"
+name = "gpu_black_scholes"
+path = "benches/gpu/black_scholes.rs"
 harness = false
-required-features = ["gpu-wgpu"]
+# Works with: --features gpu-wgpu OR --features gpu-cuda
 
 [[bench]]
-name = "gpu_black_scholes_streaming"
-path = "benches/gpu_black_scholes/streaming.rs"
+name = "gpu_monte_carlo"
+path = "benches/gpu/monte_carlo.rs"
 harness = false
-required-features = ["gpu-wgpu"]
-
-[[bench]]
-name = "gpu_black_scholes_optimized"
-path = "benches/gpu_black_scholes/optimized.rs"
-harness = false
-required-features = ["gpu-wgpu"]
-
-[[bench]]
-name = "gpu_black_scholes_batching_comparison"
-path = "benches/gpu_black_scholes/batching_comparison.rs"
-harness = false
-required-features = ["gpu-wgpu"]
-
+# Works with: --features gpu-wgpu OR --features gpu-cuda
 
 [profile.release]
 lto = true

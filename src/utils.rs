@@ -134,66 +134,63 @@ pub fn create_banner(title: &str, content_lines: &[&str]) -> String {
     result
 }
 
-/// A builder for creating formatted tables with Unicode box-drawing characters.
+/// A stateful table that automatically prints rows with separators.
 ///
-/// Supports both complete table generation and incremental streaming output.
-/// Use streaming methods (`header()`, `row()`, `footer()`) when you need to
-/// print rows incrementally, or use `build()` for a complete table.
+/// This struct handles formatted table output with Unicode box-drawing characters.
+/// It automatically:
+/// - Prints the header when the first row is added
+/// - Prints separators between rows
+/// - Prints the footer when [`finish()`](Table::finish) is called or on drop
 ///
-/// Column widths can be specified explicitly or calculated automatically from content.
-///
-/// # Example
+/// # Example: Batch row addition
 /// ```
-/// use renoir::utils::TableBuilder;
+/// use renoir::utils::Table;
 ///
-/// // Explicit column widths
-/// let table = TableBuilder::new(&[("Name", 10), ("Value", 8)]);
-/// print!("{}", table.header());
-/// print!("{}", table.row(&["foo", "42"]));
-/// print!("{}", table.row(&["bar", "123"]));
-/// print!("{}", table.footer());
-///
-/// // Auto-sized columns (width = 0 means auto-calculate)
-/// let table = TableBuilder::new(&[("Name", 0), ("Value", 0)]);
-/// let rows = vec![
-///     vec!["foo", "42"],
-///     vec!["bar", "123456"],
-/// ];
-/// print!("{}", table.build(&rows));
+/// let mut table = Table::new(&[("Name", 10), ("Value", 8)]);
+/// table.add_row(&["foo", "42"]);
+/// table.add_row(&["bar", "123"]);
+/// table.finish();
 /// ```
-pub struct TableBuilder {
+///
+/// # Example: Incremental cell population
+/// ```
+/// use renoir::utils::Table;
+///
+/// let mut table = Table::new(&[("Name", 10), ("Value", 8)]);
+/// table.set_cell(0, "foo");
+/// table.set_cell(1, "42");
+/// table.flush_row();  // Finalizes the row
+/// table.start_row();
+/// table.set_cell(0, "bar");  // Updates display immediately
+/// table.set_cell(1, "123");
+/// table.flush_row();
+/// table.finish();
+/// ```
+pub struct Table {
     /// Column definitions: (header name, width)
     columns: Vec<(String, usize)>,
+    /// Buffer for the current row's cells (for incremental population)
+    cell_buffer: Vec<String>,
+    current_row: usize,
+    header_printed: bool,
+    row_started: bool,
+    finished: bool,
 }
 
-impl TableBuilder {
-    /// Creates a new TableBuilder with the specified columns.
-    ///
-    /// If width is 0, it will be auto-calculated based on content when using `build()`.
-    /// For streaming output (`header()`, `row()`, `footer()`), a minimum width based
-    /// on the header name length + 2 will be used.
+impl Table {
+    /// Creates a new Table with the specified columns.
     ///
     /// # Arguments
     /// * `columns` - Slice of tuples containing (header_name, column_width)
     ///
     /// # Example
     /// ```
-    /// use renoir::utils::TableBuilder;
+    /// use renoir::utils::Table;
     ///
-    /// // Explicit widths
-    /// let table = TableBuilder::new(&[
-    ///     ("ID", 6),
-    ///     ("Name", 20),
-    ///     ("Score", 10),
-    /// ]);
-    ///
-    /// // Auto-width (set to 0)
-    /// let table = TableBuilder::new(&[
-    ///     ("ID", 0),
-    ///     ("Name", 0),
-    /// ]);
+    /// let mut table = Table::new(&[("ID", 6), ("Name", 20), ("Score", 10)]);
     /// ```
     pub fn new(columns: &[(&str, usize)]) -> Self {
+        let num_cols = columns.len();
         Self {
             columns: columns
                 .iter()
@@ -207,97 +204,141 @@ impl TableBuilder {
                     (name.to_string(), effective_width)
                 })
                 .collect(),
+            cell_buffer: vec![String::new(); num_cols],
+            current_row: 0,
+            header_printed: false,
+            row_started: false,
+            finished: false,
         }
     }
 
-    /// Creates a new TableBuilder with auto-calculated column widths based on data.
+    /// Starts a new row, printing header/separator as needed and showing empty cells.
     ///
-    /// This analyzes the provided rows and calculates optimal widths for each column.
+    /// Call this before setting cells for a new row. The row is displayed immediately
+    /// with empty cells, then `set_cell()` updates cells in real-time.
+    pub fn start_row(&mut self) {
+        use std::io::{self, Write};
+        
+        // Print header on first row
+        if !self.header_printed {
+            print!("{}", self.format_header());
+            self.header_printed = true;
+        } else if self.current_row > 0 {
+            // Print separator before this row (not before first data row)
+            print!("{}", self.format_separator());
+        }
+        
+        // Clear buffer for new row
+        for cell in &mut self.cell_buffer {
+            cell.clear();
+        }
+        
+        // Print empty row (without newline - we'll overwrite it)
+        self.print_current_row_inline();
+        io::stdout().flush().ok();
+        self.row_started = true;
+    }
+
+    /// Sets a cell value and immediately updates the display.
+    ///
+    /// The row is reprinted in-place using carriage return, showing the updated cell.
     ///
     /// # Arguments
-    /// * `headers` - Slice of header names
-    /// * `rows` - Slice of rows to analyze for width calculation
-    ///
-    /// # Example
-    /// ```
-    /// use renoir::utils::TableBuilder;
-    ///
-    /// let rows = vec![
-    ///     vec!["foo", "42"],
-    ///     vec!["barbaz", "123456"],
-    /// ];
-    /// let table = TableBuilder::from_data(&["Name", "Value"], &rows);
-    /// print!("{}", table.build(&rows));
-    /// ```
-    pub fn from_data(headers: &[&str], rows: &[Vec<&str>]) -> Self {
-        let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
-
-        // Find the max width for each column from row data
-        for row in rows {
-            for (i, cell) in row.iter().enumerate() {
-                if i < widths.len() {
-                    widths[i] = widths[i].max(cell.len());
-                }
+    /// * `col` - Column index (0-based)
+    /// * `value` - Cell value to set
+    pub fn set_cell(&mut self, col: usize, value: &str) {
+        use std::io::{self, Write};
+        
+        if col < self.cell_buffer.len() {
+            self.cell_buffer[col] = value.to_string();
+            
+            // If row has started, update the display
+            if self.row_started {
+                self.print_current_row_inline();
+                io::stdout().flush().ok();
             }
         }
-
-        // Add padding (2 characters on each side)
-        let columns: Vec<(String, usize)> = headers
-            .iter()
-            .zip(widths.iter())
-            .map(|(name, width)| (name.to_string(), width + 2))
-            .collect();
-
-        Self { columns }
     }
 
-    /// Updates column widths based on the provided rows.
+    /// Finalizes the current row with a newline and advances to the next row.
+    pub fn flush_row(&mut self) {
+        if self.row_started {
+            println!();  // End the current row with newline
+            self.current_row += 1;
+            self.row_started = false;
+        }
+    }
+
+    /// Prints the current row inline (without newline) for live updates.
+    fn print_current_row_inline(&self) {
+        let cells: Vec<&str> = self.cell_buffer.iter().map(|s| s.as_str()).collect();
+        let row_str = self.format_row_no_newline(&cells);
+        print!("\r{}", row_str);
+    }
+
+    /// Generates a single data row WITHOUT trailing newline (for live updates).
+    fn format_row_no_newline(&self, cells: &[&str]) -> String {
+        let mut result = String::new();
+        result.push('│');
+
+        for (i, (_, width)) in self.columns.iter().enumerate() {
+            let cell = cells.get(i).copied().unwrap_or("");
+            let padding = width.saturating_sub(cell.len());
+            let left_pad = padding / 2;
+            let right_pad = padding - left_pad;
+            result.push_str(&" ".repeat(left_pad));
+            result.push_str(cell);
+            result.push_str(&" ".repeat(right_pad));
+            if i < self.columns.len() - 1 {
+                result.push('│');
+            }
+        }
+        result.push('│');
+
+        result
+    }
+
+
+    /// Adds and immediately prints a row to the table.
     ///
-    /// This is useful when you want to calculate widths before streaming output.
+    /// On the first call, this also prints the table header.
+    /// Between rows, this automatically prints separators.
     ///
     /// # Arguments
-    /// * `rows` - Slice of rows to analyze for width calculation
-    ///
-    /// # Returns
-    /// A new `TableBuilder` with updated widths.
-    pub fn with_data(self, rows: &[Vec<&str>]) -> Self {
-        let mut widths: Vec<usize> = self.columns.iter().map(|(name, w)| (*w).max(name.len())).collect();
-
-        // Find the max width for each column from row data
-        for row in rows {
-            for (i, cell) in row.iter().enumerate() {
-                if i < widths.len() {
-                    widths[i] = widths[i].max(cell.len() + 2); // Add padding
-                }
-            }
+    /// * `cells` - Slice of cell values (should match the number of columns)
+    pub fn add_row(&mut self, cells: &[&str]) {
+        // Print header on first row
+        if !self.header_printed {
+            print!("{}", self.format_header());
+            self.header_printed = true;
+        } else {
+            // Print separator before this row (after previous row)
+            print!("{}", self.format_separator());
         }
 
-        Self {
-            columns: self
-                .columns
-                .iter()
-                .zip(widths.iter())
-                .map(|((name, _), width)| (name.clone(), *width))
-                .collect(),
+        // Print the row
+        print!("{}", self.format_row(cells));
+        self.current_row += 1;
+    }
+
+    /// Finishes the table by printing the footer.
+    ///
+    /// This is called automatically on drop, but can be called explicitly
+    /// if you need the footer printed at a specific point.
+    pub fn finish(&mut self) {
+        if !self.finished && self.header_printed {
+            print!("{}", self.format_footer());
+            self.finished = true;
         }
     }
+
+
+    // ========================================================================
+    // Internal formatting methods
+    // ========================================================================
 
     /// Generates the table header (top border + header row + separator).
-    ///
-    /// # Returns
-    /// A `String` containing the header portion of the table.
-    ///
-    /// # Example
-    /// ```
-    /// use renoir::utils::TableBuilder;
-    ///
-    /// let table = TableBuilder::new(&[("Name", 10), ("Value", 8)]);
-    /// print!("{}", table.header());
-    /// // ┌──────────┬────────┐
-    /// // │   Name   │ Value  │
-    /// // ├──────────┼────────┤
-    /// ```
-    pub fn header(&self) -> String {
+    fn format_header(&self) -> String {
         let mut result = String::new();
 
         // Top border: ┌────┬────┬────┐
@@ -338,25 +379,8 @@ impl TableBuilder {
         result
     }
 
-    /// Generates a single data row.
-    ///
-    /// Cell values are centered within their column width.
-    ///
-    /// # Arguments
-    /// * `cells` - Slice of cell values (should match the number of columns)
-    ///
-    /// # Returns
-    /// A `String` containing a single table row.
-    ///
-    /// # Example
-    /// ```
-    /// use renoir::utils::TableBuilder;
-    ///
-    /// let table = TableBuilder::new(&[("Name", 10), ("Value", 8)]);
-    /// print!("{}", table.row(&["foo", "42"]));
-    /// // │   foo    │   42   │
-    /// ```
-    pub fn row(&self, cells: &[&str]) -> String {
+    /// Generates a single data row with centered cell values.
+    fn format_row(&self, cells: &[&str]) -> String {
         let mut result = String::new();
         result.push('│');
 
@@ -377,20 +401,25 @@ impl TableBuilder {
         result
     }
 
+    /// Generates a row separator (horizontal line between rows).
+    fn format_separator(&self) -> String {
+        let mut result = String::new();
+
+        // Separator: ├────┼────┼────┤
+        result.push('├');
+        for (i, (_, width)) in self.columns.iter().enumerate() {
+            result.push_str(&"─".repeat(*width));
+            if i < self.columns.len() - 1 {
+                result.push('┼');
+            }
+        }
+        result.push_str("┤\n");
+
+        result
+    }
+
     /// Generates the table footer (bottom border).
-    ///
-    /// # Returns
-    /// A `String` containing the footer portion of the table.
-    ///
-    /// # Example
-    /// ```
-    /// use renoir::utils::TableBuilder;
-    ///
-    /// let table = TableBuilder::new(&[("Name", 10), ("Value", 8)]);
-    /// print!("{}", table.footer());
-    /// // └──────────┴────────┘
-    /// ```
-    pub fn footer(&self) -> String {
+    fn format_footer(&self) -> String {
         let mut result = String::new();
 
         // Bottom border: └────┴────┴────┘
@@ -405,36 +434,11 @@ impl TableBuilder {
 
         result
     }
+}
 
-    /// Generates a complete table with all rows.
-    ///
-    /// This is a convenience method that combines `header()`, multiple `row()` calls,
-    /// and `footer()` into a single string.
-    ///
-    /// # Arguments
-    /// * `rows` - Slice of rows, where each row is a Vec of cell values
-    ///
-    /// # Returns
-    /// A `String` containing the complete table.
-    ///
-    /// # Example
-    /// ```
-    /// use renoir::utils::TableBuilder;
-    ///
-    /// let table = TableBuilder::new(&[("Name", 10), ("Value", 8)]);
-    /// let rows = vec![
-    ///     vec!["foo", "42"],
-    ///     vec!["bar", "123"],
-    /// ];
-    /// print!("{}", table.build(&rows));
-    /// ```
-    pub fn build(&self, rows: &[Vec<&str>]) -> String {
-        let mut result = self.header();
-        for row in rows {
-            result.push_str(&self.row(row));
-        }
-        result.push_str(&self.footer());
-        result
+impl Drop for Table {
+    fn drop(&mut self) {
+        self.finish();
     }
 }
 
@@ -460,30 +464,28 @@ mod tests {
     }
 
     #[test]
-    fn test_table_builder() {
-        let table = TableBuilder::new(&[("A", 5), ("B", 5)]);
-        let header = table.header();
+    fn test_table_formatting() {
+        let table = Table::new(&[("A", 5), ("B", 5)]);
+        let header = table.format_header();
         assert!(header.contains("┌"));
         assert!(header.contains("A"));
         assert!(header.contains("B"));
 
-        let row = table.row(&["1", "2"]);
+        let row = table.format_row(&["1", "2"]);
         assert!(row.contains("1"));
         assert!(row.contains("2"));
 
-        let footer = table.footer();
+        let footer = table.format_footer();
         assert!(footer.contains("└"));
     }
 
     #[test]
-    fn test_table_build_complete() {
-        let table = TableBuilder::new(&[("X", 5), ("Y", 5)]);
-        let rows = vec![vec!["a", "b"], vec!["c", "d"]];
-        let complete = table.build(&rows);
-        assert!(complete.contains("┌"));
-        assert!(complete.contains("└"));
-        assert!(complete.contains("a"));
-        assert!(complete.contains("d"));
+    fn test_table_separator() {
+        let table = Table::new(&[("X", 5), ("Y", 5)]);
+        let sep = table.format_separator();
+        assert!(sep.contains("├"));
+        assert!(sep.contains("┼"));
+        assert!(sep.contains("┤"));
     }
 }
 

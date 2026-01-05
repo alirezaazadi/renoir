@@ -1,0 +1,35 @@
+{
+  "benchmark_type": "monte_carlo",
+  "timestamp": "2025-12-31T17:15:52.234950+00:00",
+  "platform": "macos aarch64 WGPU",
+  "config": "paths=1000, steps=50",
+  "results": [
+    {
+      "items_count": 10000,
+      "cpu_seq_time_s": 6.469346541,
+      "cpu_par_time_s": 0.810805125,
+      "gpu_time_s": 0.137735333,
+      "speedup_vs_seq": 46.969404292216005,
+      "speedup_vs_par": 5.886689401622168,
+      "gpu_gflops": 72.60301174862663
+    },
+    {
+      "items_count": 100000,
+      "cpu_seq_time_s": 64.366453708,
+      "cpu_par_time_s": 8.012509,
+      "gpu_time_s": 0.148776375,
+      "speedup_vs_seq": 432.6389435688294,
+      "speedup_vs_par": 53.85605745535876,
+      "gpu_gflops": 672.1497280734256
+    },
+    {
+      "items_count": 1000000,
+      "cpu_seq_time_s": 643.363749708,
+      "cpu_par_time_s": 79.62259175,
+      "gpu_time_s": 1.224069833,
+      "speedup_vs_seq": 525.5939917506324,
+      "speedup_vs_par": 65.04742589306177,
+      "gpu_gflops": 816.9468546979542
+    }
+  ]
+}

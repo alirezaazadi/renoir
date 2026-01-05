@@ -117,13 +117,6 @@ where
     // Buffering State
     // ════════════════════════════════════════════════════════════════════
 
-    /// Buffer accumulating input items until a batch is ready.
-    ///
-    /// Items are added one at a time from upstream and removed all at once
-    /// when flushed to the GPU.
-    #[derivative(Debug = "ignore")]
-    buffer: Vec<K::Input>,
-
     /// Timestamps associated with buffered items (parallel to `buffer`).
     ///
     /// `buffer_timestamps[i]` is `Some(ts)` if `buffer[i]` came from a
@@ -179,6 +172,16 @@ where
 
     /// Flag indicating upstream sent `FlushAndRestart`.
     received_flush_restart: bool,
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Async Pipelining State
+    // ════════════════════════════════════════════════════════════════════
+    
+    /// Timestamps from the PREVIOUS batch (for async pipelining).
+    ///
+    /// When using pipelined kernels, flush() returns results from the previous
+    /// batch. These timestamps are matched with those lagged outputs.
+    pending_timestamps: Vec<Option<Timestamp>>,
 }
 
 impl<K, Op> MapGpu<K, Op>
@@ -230,7 +233,6 @@ where
             prev,
             kernel,
             strategy,
-            buffer: Vec::with_capacity(1024),
             buffer_timestamps: Vec::with_capacity(1024),
             output_queue: VecDeque::new(),
             gpu_context: None,
@@ -240,6 +242,7 @@ where
             pending_watermark: None,
             received_end: false,
             received_flush_restart: false,
+            pending_timestamps: Vec::new(),
         }
     }
 
@@ -251,7 +254,7 @@ where
     ///
     /// Returns `false` if the buffer is empty.
     fn should_flush(&self) -> bool {
-        if self.buffer.is_empty() {
+        if self.kernel.buffer_len() == 0 {
             return false;
         }
 
@@ -263,7 +266,7 @@ where
         };
 
         // Check the size threshold
-        if self.buffer.len() >= target_size {
+        if self.kernel.buffer_len() >= target_size {
             return true;
         }
 
@@ -289,9 +292,9 @@ where
     /// # Panics
     ///
     /// - If GPU context is not initialized (setup not called)
-    /// - If kernel returns a different number of outputs than inputs
+    /// - If kernel returns a different number of outputs than inputs (for non-pipelined kernels)
     fn flush_to_gpu(&mut self) {
-        if self.buffer.is_empty() {
+        if self.kernel.buffer_len() == 0 && self.pending_timestamps.is_empty() {
             return;
         }
 
@@ -303,13 +306,14 @@ where
         // Time the execution for adaptive sizing feedback
         let start = Instant::now();
 
-        // Drain buffer contents (preserves allocated capacity for reuse)
-        let inputs: Vec<K::Input> = self.buffer.drain(..).collect();
-        let timestamps: Vec<Option<Timestamp>> = self.buffer_timestamps.drain(..).collect();
-        let num_items = inputs.len();
+        // Drain CURRENT timestamp buffer (these will be matched with NEXT flush's outputs)
+        let current_timestamps: Vec<Option<Timestamp>> = self.buffer_timestamps.drain(..).collect();
+        let num_items = current_timestamps.len();
 
-        // Execute GPU kernel on the batch
-        let outputs = self.kernel.execute(ctx, &inputs);
+        // Execute GPU kernel on the kernel's internal buffer
+        // For pipelined kernels: returns PREVIOUS batch results
+        // For non-pipelined kernels: returns CURRENT batch results
+        let outputs = self.kernel.flush(ctx);
 
         // Update adaptive sizer with throughput measurement
         if let Some(ref mut sizer) = self.adaptive_sizer {
@@ -318,22 +322,37 @@ where
 
         // Reset timer for timed strategy
         if let Some(ref mut timer) = self.batch_timer {
-            timer.record_flush();
+            timer.record_flush()
         }
 
-        // Validate output count matches input count
-        assert_eq!(
-            outputs.len(),
-            timestamps.len(),
-            "Kernel must produce exactly one output per input. Got {} outputs for {} inputs.",
-            outputs.len(),
-            timestamps.len()
-        );
-
-        // Pair each output with its corresponding timestamp and enqueue
-        for (output, ts) in outputs.into_iter().zip(timestamps.into_iter()) {
-            self.output_queue.push_back((output, ts));
+        // Handle output/timestamp matching based on pipelining
+        if outputs.len() == self.pending_timestamps.len() && !self.pending_timestamps.is_empty() {
+            // PIPELINED: outputs are from PREVIOUS batch, match with pending_timestamps
+            for (output, ts) in outputs.into_iter().zip(self.pending_timestamps.drain(..)) {
+                self.output_queue.push_back((output, ts));
+            }
+            // Store current timestamps for next flush
+            self.pending_timestamps = current_timestamps;
+        } else if outputs.len() == current_timestamps.len() && !current_timestamps.is_empty() {
+            // NON-PIPELINED: outputs match current batch
+            for (output, ts) in outputs.into_iter().zip(current_timestamps.into_iter()) {
+                self.output_queue.push_back((output, ts));
+            }
+        } else if outputs.is_empty() && !current_timestamps.is_empty() {
+            // PIPELINED FIRST BATCH: kernel launched async, no outputs yet
+            // Store current timestamps for next flush
+            self.pending_timestamps = current_timestamps;
+        } else if !outputs.is_empty() && !self.pending_timestamps.is_empty() {
+            // Unexpected case - validate
+            assert_eq!(
+                outputs.len(),
+                self.pending_timestamps.len(),
+                "Kernel returned {} outputs but {} pending timestamps. Pipelining mismatch.",
+                outputs.len(),
+                self.pending_timestamps.len()
+            );
         }
+        // Case: outputs.is_empty() && current_timestamps.is_empty() - do nothing
     }
 
     /// Buffer an item for later GPU processing.
@@ -346,12 +365,49 @@ where
     /// * `item` - Input item to buffer
     /// * `timestamp` - Optional timestamp if the item came from `Timestamped`
     fn buffer_item(&mut self, item: K::Input, timestamp: Option<Timestamp>) {
-        self.buffer.push(item);
+        // Push directly to kernel's internal buffer (no intermediate copy)
+        self.kernel.push(item);
         self.buffer_timestamps.push(timestamp);
 
         // Check if we should flush after adding this item
         if self.should_flush() {
             self.flush_to_gpu();
+        }
+    }
+    
+    /// Drain any pending results from async pipelining at end of stream.
+    ///
+    /// For pipelined kernels, the final batch's results are still pending
+    /// after the last flush(). This method calls kernel.drain() to collect
+    /// those final results and matches them with pending_timestamps.
+    fn drain_pending_to_gpu(&mut self) {
+        if self.pending_timestamps.is_empty() {
+            return;
+        }
+        
+        let ctx = self
+            .gpu_context
+            .as_ref()
+            .expect("GPU context not initialized - was setup() called?");
+        
+        // Call kernel.drain() to get final pending results
+        let outputs = self.kernel.drain(ctx);
+        
+        if outputs.is_empty() {
+            return;
+        }
+        
+        // Match outputs with pending_timestamps
+        assert_eq!(
+            outputs.len(),
+            self.pending_timestamps.len(),
+            "Kernel drain returned {} outputs but {} pending timestamps.",
+            outputs.len(),
+            self.pending_timestamps.len()
+        );
+        
+        for (output, ts) in outputs.into_iter().zip(self.pending_timestamps.drain(..)) {
+            self.output_queue.push_back((output, ts));
         }
     }
 }
@@ -401,7 +457,6 @@ where
         // Pre-allocate buffers based on strategy
         // Use a reasonable cap of 50M to balance memory usage and performance
         let initial_capacity = self.strategy.target_size().min(50_000_000);
-        self.buffer = Vec::with_capacity(initial_capacity);
         self.buffer_timestamps = Vec::with_capacity(initial_capacity);
         
         // Pre-allocate output queue as well for better performance
@@ -480,6 +535,8 @@ where
                 StreamElement::FlushAndRestart => {
                     // Flush any remaining buffered items
                     self.flush_to_gpu();
+                    // Drain any pending results from pipelined execution
+                    self.drain_pending_to_gpu();
 
                     // Schedule watermark to be emitted after outputs
                     if let Some(wm) = self.max_watermark.take() {
@@ -494,6 +551,8 @@ where
                 StreamElement::Terminate => {
                     // Flush any remaining buffered items
                     self.flush_to_gpu();
+                    // Drain any pending results from pipelined execution
+                    self.drain_pending_to_gpu();
 
                     // Schedule watermark to be emitted after outputs
                     if let Some(wm) = self.max_watermark.take() {

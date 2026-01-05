@@ -129,50 +129,58 @@ pub trait GpuKernel: Clone + Send + 'static {
 
     /// Execute the kernel on a batch of inputs, returning outputs.
     ///
-    /// This is the core method that performs GPU computation. It is called
-    /// by the `MapGpu` operator when a batch of items is ready for processing.
+    /// **Deprecated**: Prefer implementing `push()` + `flush()` for better performance.
+    /// This method is kept for backward compatibility and has a default implementation
+    /// that calls `push()` for each item then `flush()`.
     ///
     /// # Arguments
     ///
-    /// * `ctx` - GPU context providing access to compute resources. Use
-    ///   `ctx.client()` to allocate buffers and launch kernels.
-    /// * `inputs` - Slice of input items to process. Maybe empty.
+    /// * `ctx` - GPU context providing access to compute resources.
+    /// * `inputs` - Slice of input items to process.
     ///
     /// # Returns
     ///
     /// A vector of output items, with exactly one output per input.
-    /// **Important**: `outputs.len()` must equal `inputs.len()`.
+    fn execute(&mut self, ctx: &GpuContext, inputs: &[Self::Input]) -> Vec<Self::Output> {
+        for input in inputs {
+            self.push(input.clone());
+        }
+        self.flush(ctx)
+    }
+
+    /// Push a single item directly to the kernel's internal buffer.
     ///
-    /// # Implementation Steps
+    /// This method enables streaming accumulation without intermediate copies.
+    /// The kernel should accumulate items in an efficient format (e.g., SoA).
     ///
-    /// 1. **Prepare Data**: Extract fields from input structs into arrays
-    ///    suitable for GPU (struct-of-arrays is often better than array-of-structs)
+    /// # Arguments
     ///
-    /// 2. **Pad for Vectorization**: GPU kernels often use SIMD-like operations.
-    ///    Pad arrays to multiples of the vectorization factor (typically 4).
+    /// * `item` - Single input item to buffer
+    fn push(&mut self, item: Self::Input);
+
+    /// Get the current number of items in the kernel's buffer.
     ///
-    /// 3. **Allocate GPU Buffers**: Use `ctx.client().create(data)` for inputs
-    ///    and `ctx.client().empty(size)` for outputs.
+    /// Used by the `MapGpu` operator to determine when to flush based on
+    /// the batching strategy.
+    fn buffer_len(&self) -> usize;
+
+    /// Flush the internal buffer to GPU, execute, and return results.
     ///
-    /// 4. **Configure Launch**: Set up `CubeDim` (threads per workgroup) and
-    ///    `CubeCount` (number of workgroups) for your kernel.
+    /// This method:
+    /// 1. Pads buffer for vectorization alignment if needed
+    /// 2. Uploads buffer to GPU
+    /// 3. Executes the GPU kernel
+    /// 4. Reads results back
+    /// 5. Clears the internal buffer
     ///
-    /// 5. **Launch Kernel**: Use CubeCL's `launch_unchecked` with an appropriate
-    ///    runtime (WgpuRuntime or CudaRuntime).
+    /// # Arguments
     ///
-    /// 6. **Synchronize**: Call `ctx.sync()` to wait for GPU completion.
+    /// * `ctx` - GPU context for execution
     ///
-    /// 7. **Read Results**: Use `ctx.client().read_one(handle)` to get output bytes.
+    /// # Returns
     ///
-    /// 8. **Convert**: Transform bytes back into output structs.
-    ///
-    /// # Panics
-    ///
-    /// May panic if:
-    /// - GPU resources are exhausted
-    /// - Kernel compilation fails
-    /// - Invalid launch configuration
-    fn execute(&self, ctx: &GpuContext, inputs: &[Self::Input]) -> Vec<Self::Output>;
+    /// Vector of output items corresponding to buffered inputs
+    fn flush(&mut self, ctx: &GpuContext) -> Vec<Self::Output>;
 
     /// Optional hint for the preferred batch size.
     ///
@@ -211,4 +219,22 @@ pub trait GpuKernel: Clone + Send + 'static {
     ///
     /// Does nothing. Override only if you have set up work to do.
     fn setup(&mut self, _ctx: &GpuContext) {}
+    
+    /// Drain any pending results from async pipelining.
+    ///
+    /// For kernels that implement async pipelining (where flush() returns
+    /// results from the previous batch), this method collects the final
+    /// pending results when the stream ends.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - GPU context for reading pending results
+    ///
+    /// # Returns
+    ///
+    /// Vector of any pending output items from pipelined execution.
+    /// Returns empty vector for non-pipelined kernels.
+    fn drain(&mut self, _ctx: &GpuContext) -> Vec<Self::Output> {
+        Vec::new()
+    }
 }

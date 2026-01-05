@@ -6,3 +6,12 @@ target
 /bench_conf.toml
 /log.txt
 .vscode/
+
+# Cursor IDE
+.cursor/
+.cursorignore
+.cursorindexingignore
+.cursorrules
+
+# Antigravity IDE
+.antigravity/

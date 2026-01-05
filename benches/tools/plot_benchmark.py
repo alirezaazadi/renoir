@@ -2,21 +2,18 @@
 """
 Unified GPU Benchmark Plotting Tool.
 
-This script visualizes benchmark results produced by the gpu_black_scholes benchmarks.
-It supports all benchmark types: standard, optimized, streaming, and comparison (batching).
+This script visualizes benchmark results from the Black-Scholes CPU vs GPU benchmark.
+It compares four strategies: CPU Sequential, CPU Parallel, GPU Sequential, GPU Parallel.
 
 Usage:
-    # Plot by benchmark type (uses most recent file for that type)
-    python benches/tools/plot_benchmark.py standard
-    python benches/tools/plot_benchmark.py optimized
-    python benches/tools/plot_benchmark.py streaming
-    python benches/tools/plot_benchmark.py comparison
+    # Plot by benchmark type (uses most recent file)
+    python benches/tools/plot_benchmark.py black_scholes
 
-    # Plot a specific results file (auto-detects benchmark type from file)
-    python benches/tools/plot_benchmark.py benches/results/standard/2024-12-04/standard_benchmark_*.json
+    # Plot a specific results file
+    python benches/tools/plot_benchmark.py benches/results/black_scholes/2024-12-04/black_scholes_benchmark_*.json
 
 Output:
-    Charts are saved alongside the JSON file as plot_{type}_benchmark_{timestamp}.png
+    Charts are saved alongside the JSON file as plot_black_scholes_benchmark_{timestamp}.png
 """
 
 import json
@@ -32,20 +29,14 @@ import numpy as np
 # Benchmark Type Constants
 # ============================================================================
 
-BENCHMARK_TYPES = ["standard", "optimized", "streaming", "comparison"]
+BENCHMARK_TYPES = ["black_scholes"]
 
 BENCHMARK_TYPE_DISPLAY = {
-    "standard": "Standard",
-    "optimized": "Optimized (Kernel-Only Timing)",
-    "streaming": "Streaming Simulation",
-    "comparison": "Batching Comparison",
+    "black_scholes": "Black-Scholes CPU vs GPU",
 }
 
 BENCHMARK_FILE_PREFIXES = {
-    "standard": "standard_benchmark",
-    "optimized": "optimized_benchmark",
-    "streaming": "streaming_benchmark",
-    "comparison": "comparison_benchmark",
+    "black_scholes": "black_scholes_benchmark",
 }
 
 
@@ -78,14 +69,8 @@ def get_benchmark_type(metadata: dict, filename: Path) -> str:
 
     # Fall back to parsing filename
     name = filename.stem.lower()
-    if "comparison" in name or "batching" in name:
-        return "comparison"
-    elif "optimized" in name:
-        return "optimized"
-    elif "streaming" in name:
-        return "streaming"
-    elif "standard" in name:
-        return "standard"
+    if "black_scholes" in name:
+        return "black_scholes"
     
     return None
 
@@ -145,6 +130,7 @@ def build_config_description(results, metadata):
     platform = metadata.get("platform", "Unknown")
     benchmark_type = metadata.get("benchmark_type", "unknown")
     is_streaming = metadata.get("is_streaming", False)
+    system_config = metadata.get("system_config", {})
     
     items_counts = [r["items_count"] for r in results]
     min_items = min(items_counts) if items_counts else 0
@@ -152,10 +138,28 @@ def build_config_description(results, metadata):
     
     cpu_workers = results[0].get("cpu_workers", 4) if results else 4
     
+    # Extract system config values
+    cpu_cores = system_config.get("cpu_cores", cpu_workers)
+    ram_gb = system_config.get("ram_gb", 0)
+    gpu_device = system_config.get("gpu_device", None)
+    vectorization = system_config.get("vectorization_factor", 16)
+    gpu_batch = system_config.get("gpu_batch_size", 10_000_000)
+    
     lines = [
         f"Type: {BENCHMARK_TYPE_DISPLAY.get(benchmark_type, benchmark_type.title())}",
-        f"System: {platform}",
     ]
+    
+    # Add system details if available
+    if ram_gb > 0:
+        lines.append(f"CPU: {cpu_cores} cores, RAM: {ram_gb:.0f}GB")
+    else:
+        lines.append(f"CPU: {cpu_cores} cores")
+    
+    # Add GPU device info
+    if gpu_device:
+        lines.append(f"GPU: {gpu_device}")
+    else:
+        lines.append(f"GPU: {platform}")
     
     if is_streaming:
         streaming_config = metadata.get("streaming_config", {})
@@ -165,7 +169,8 @@ def build_config_description(results, metadata):
     else:
         lines.append(f"Problem Sizes: {format_number(min_items)} - {format_number(max_items)}")
     
-    lines.append(f"CPU Workers: {cpu_workers}")
+    lines.append(f"Vec: {vectorization}")
+    lines.append(f"Batch: {format_number(gpu_batch)}")
     lines.append(f"Tests: {len(results)}")
     
     return "  |  ".join(lines)
@@ -187,15 +192,51 @@ def plot_standard_results(results, metadata, source_name: str, output_dir: Path,
 
     items_counts = [r["items_count"] for r in results]
     data_sizes = [r["data_size_gb"] for r in results]
-    cpu_times = [r["cpu_total_time_s"] for r in results]
-    gpu_times = [r["gpu_total_time_s"] for r in results]
-    renoir_times = [r["renoir_total_time_s"] for r in results]
-    speedups = [r["speedup"] for r in results]  # CPU Sequential vs GPU
-    speedups_parallel = [rt / gt if gt > 0 else 0 for rt, gt in zip(renoir_times, gpu_times)]
-    cpu_gflops = [r["cpu_gflops"] for r in results]
-    gpu_gflops = [r["gpu_gflops"] for r in results]
-    renoir_gflops = [r["renoir_gflops"] for r in results]
+    
+    # Support multiple field naming conventions (newest to oldest)
+    # Newest: renoir_seq_total_time_s, renoir_par_total_time_s, gpu_total_time_s
+    # Middle: cpu_total_time_s, renoir_total_time_s, gpu_total_time_s
+    # Old: cpu_seq_time_s, cpu_par_time_s, gpu_double_buf_time_s
+    def get_field(r, *names, default=0):
+        for name in names:
+            if name in r:
+                return r[name]
+        return default
+    
+    cpu_times = [get_field(r, "renoir_seq_total_time_s", "cpu_total_time_s", "cpu_seq_time_s") for r in results]
+    gpu_times = [get_field(r, "gpu_total_time_s", "gpu_double_buf_time_s") for r in results]
+    renoir_times = [get_field(r, "renoir_par_total_time_s", "renoir_total_time_s", "cpu_par_time_s") for r in results]
+    
+    # Calculate speedups if not provided
+    speedups = []
+    for r, cpu_t, gpu_t in zip(results, cpu_times, gpu_times):
+        if "speedup" in r:
+            speedups.append(r["speedup"])
+        elif "gpu_double_buf_vs_cpu_seq" in r:
+            speedups.append(r["gpu_double_buf_vs_cpu_seq"])
+        else:
+            speedups.append(cpu_t / gpu_t if gpu_t > 0 else 0)
+    
+    speedups_parallel = []
+    for r, renoir_t, gpu_t in zip(results, renoir_times, gpu_times):
+        if "speedup_parallel" in r:
+            speedups_parallel.append(r["speedup_parallel"])
+        elif "gpu_double_buf_vs_cpu_par" in r:
+            speedups_parallel.append(r["gpu_double_buf_vs_cpu_par"])
+        else:
+            speedups_parallel.append(renoir_t / gpu_t if gpu_t > 0 else 0)
+    
+    cpu_gflops = [get_field(r, "renoir_seq_gflops", "cpu_gflops", "cpu_seq_gflops") for r in results]
+    gpu_gflops = [get_field(r, "gpu_gflops", "gpu_double_buf_gflops") for r in results]
+    renoir_gflops = [get_field(r, "renoir_par_gflops", "renoir_gflops", "cpu_par_gflops") for r in results]
     validation_passed = [r["validation_passed"] for r in results]
+    
+    # Optional: GPU Simple (non-double-buffered) for comparison
+    has_gpu_simple = "gpu_simple_time_s" in results[0] if results else False
+    if has_gpu_simple:
+        gpu_simple_times = [r["gpu_simple_time_s"] for r in results]
+        gpu_simple_gflops = [r.get("gpu_simple_gflops", 0) for r in results]
+        db_gains = [r.get("double_buf_vs_simple", 1.0) for r in results]
 
     plt.style.use("seaborn-v0_8-darkgrid")
     fig = plt.figure(figsize=(16, 12))
@@ -207,36 +248,42 @@ def plot_standard_results(results, metadata, source_name: str, output_dir: Path,
 
     # Chart 1: Execution Time Comparison
     ax1 = plt.subplot(2, 3, 1)
-    ax1.loglog(items_counts, cpu_times, "o-", label="Renoir CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
-    ax1.loglog(items_counts, renoir_times, "s-", label="Renoir CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
-    ax1.loglog(items_counts, gpu_times, "^-", label="Renoir GPU", color="tab:red", markersize=5, alpha=0.7)
+    ax1.loglog(items_counts, cpu_times, "o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
+    ax1.loglog(items_counts, renoir_times, "s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
+    ax1.loglog(items_counts, gpu_times, "^-", label="GPU", color="tab:red", markersize=5, alpha=0.7)
+    if has_gpu_simple:
+        ax1.loglog(items_counts, gpu_simple_times, "d-", label="GPU Simple", color="tab:orange", markersize=5, alpha=0.7)
     ax1.set_xlabel("Number of Options")
     ax1.set_ylabel("Execution Time (s)")
-    ax1.legend(loc="upper left")
+    ax1.legend(loc="upper left", fontsize=7)
     ax1.set_title("Execution Time vs Problem Size", fontweight="bold")
     ax1.grid(True, alpha=0.3, which="both")
 
     # Chart 2: Speedup vs Problem Size
     ax2 = plt.subplot(2, 3, 2)
-    ax2.semilogx(items_counts, speedups, "o-", label="vs CPU Sequential", color="tab:blue", markersize=6, alpha=0.8)
-    ax2.semilogx(items_counts, speedups_parallel, "s-", label="vs CPU Parallel", color="tab:green", markersize=6, alpha=0.8)
+    ax2.semilogx(items_counts, speedups, "o-", label="Seq/GPU", color="tab:blue", markersize=6, alpha=0.8)
+    ax2.semilogx(items_counts, speedups_parallel, "s-", label="Par/GPU", color="tab:green", markersize=6, alpha=0.8)
+    if has_gpu_simple:
+        ax2.semilogx(items_counts, db_gains, "d-", label="DB vs Simple (Gain)", color="tab:purple", markersize=6, alpha=0.8)
     ax2.axhline(y=1.0, color="black", linestyle="--", linewidth=2, label="Break-even")
     ax2.set_xlabel("Number of Options")
-    ax2.set_ylabel("Speedup (CPU / GPU)")
+    ax2.set_ylabel("Speedup Ratio")
     ax2.set_title("GPU Speedup vs Problem Size", fontweight="bold")
-    ax2.legend(loc="best")
+    ax2.legend(loc="best", fontsize=7)
     ax2.grid(True, alpha=0.3)
     ax2.axhspan(0, 1.0, alpha=0.1, color="red", label="_nolegend_")
     ax2.axhspan(1.0, ax2.get_ylim()[1] if ax2.get_ylim()[1] > 1 else 2, alpha=0.1, color="green", label="_nolegend_")
 
     # Chart 3: GFLOPS Comparison
     ax3 = plt.subplot(2, 3, 3)
-    ax3.semilogx(items_counts, cpu_gflops, "o-", label="Renoir CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
-    ax3.semilogx(items_counts, renoir_gflops, "s-", label="Renoir CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
-    ax3.semilogx(items_counts, gpu_gflops, "^-", label="Renoir GPU", color="tab:red", markersize=5, alpha=0.7)
+    ax3.semilogx(items_counts, cpu_gflops, "o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
+    ax3.semilogx(items_counts, renoir_gflops, "s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
+    if has_gpu_simple:
+        ax3.semilogx(items_counts, gpu_simple_gflops, "d-", label="GPU Simple", color="tab:orange", markersize=5, alpha=0.7)
+    ax3.semilogx(items_counts, gpu_gflops, "^-", label="GPU", color="tab:red", markersize=5, alpha=0.7)
     ax3.set_xlabel("Number of Options")
     ax3.set_ylabel("GFLOPS")
-    ax3.legend(loc="upper left")
+    ax3.legend(loc="upper left", fontsize=8)
     ax3.set_title("Computational Throughput", fontweight="bold")
     ax3.grid(True, alpha=0.3)
 
@@ -245,13 +292,17 @@ def plot_standard_results(results, metadata, source_name: str, output_dir: Path,
     cpu_throughput = [n / t if t > 0 else 0 for n, t in zip(items_counts, cpu_times)]
     gpu_throughput = [n / t if t > 0 else 0 for n, t in zip(items_counts, gpu_times)]
     par_throughput = [n / t if t > 0 else 0 for n, t in zip(items_counts, renoir_times)]
+    if has_gpu_simple:
+        gpu_simple_throughput = [n / t if t > 0 else 0 for n, t in zip(items_counts, gpu_simple_times)]
 
-    ax4.loglog(items_counts, cpu_throughput, "o-", label="Renoir CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
-    ax4.loglog(items_counts, par_throughput, "s-", label="Renoir CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
-    ax4.loglog(items_counts, gpu_throughput, "^-", label="Renoir GPU", color="tab:red", markersize=5, alpha=0.7)
+    ax4.loglog(items_counts, cpu_throughput, "o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
+    ax4.loglog(items_counts, par_throughput, "s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
+    if has_gpu_simple:
+        ax4.loglog(items_counts, gpu_simple_throughput, "d-", label="GPU Simple", color="tab:orange", markersize=5, alpha=0.7)
+    ax4.loglog(items_counts, gpu_throughput, "^-", label="GPU", color="tab:red", markersize=5, alpha=0.7)
     ax4.set_xlabel("Number of Options")
     ax4.set_ylabel("Options/second")
-    ax4.legend(loc="upper left")
+    ax4.legend(loc="upper left", fontsize=8)
     ax4.set_title("Pricing Throughput", fontweight="bold")
     ax4.grid(True, alpha=0.3, which="both")
 
@@ -392,13 +443,29 @@ def print_standard_summary(results, metadata, speedups, speedups_parallel,
         print(f"\nGPU becomes faster at: ~{items_counts[crossover_idx]:,} options")
 
     best_idx = int(np.argmax(speedups))
-    cpu_times = [r["cpu_total_time_s"] for r in results]
-    gpu_times = [r["gpu_total_time_s"] for r in results]
+    
+    # Support multiple field naming conventions
+    def get_field(r, *names):
+        for name in names:
+            if name in r:
+                return r[name]
+        return 0
+    
+    cpu_times = [get_field(r, "renoir_seq_total_time_s", "cpu_total_time_s", "cpu_seq_time_s") for r in results]
+    gpu_times = [get_field(r, "gpu_total_time_s", "gpu_double_buf_time_s") for r in results]
     print(f"\nBest GPU performance:")
     print(f"  Speedup: {speedups[best_idx]:.3f}x")
     print(f"  Options: {items_counts[best_idx]:,}")
     print(f"  CPU time: {cpu_times[best_idx]:.4f}s")
     print(f"  GPU time: {gpu_times[best_idx]:.4f}s")
+    
+    # Double-buffer gain statistics if available
+    if results and "double_buf_vs_simple" in results[0]:
+        db_gains = [r.get("double_buf_vs_simple", 1.0) for r in results]
+        print(f"\nDouble-Buffer Gain (vs Simple GPU):")
+        print(f"  Min:  {min(db_gains):.2f}x")
+        print(f"  Max:  {max(db_gains):.2f}x")
+        print(f"  Mean: {np.mean(db_gains):.2f}x")
 
     print(f"\nPeak GFLOPS:")
     print(f"  Renoir CPU Sequential: {max(cpu_gflops):.2f}")
@@ -940,6 +1007,340 @@ def plot_streaming_results(results, metadata, source_name: str, output_dir: Path
 
 
 # ============================================================================
+# Unified Black-Scholes Benchmark Plots
+# ============================================================================
+
+def plot_unified_results(results, metadata, source_name, output_dir):
+    """
+    Generate comprehensive benchmark visualization for the unified benchmark.
+    
+    The results format has:
+    - strategy: "cpu_sequential", "cpu_parallel", "gpu_sequential", "gpu_parallel"
+    - num_options: number of options processed
+    - duration_ms: execution time in milliseconds
+    - throughput_mops: million options per second
+    - num_workers: number of workers used
+    """
+    
+    # Strategy display names and colors
+    strategy_display = {
+        "cpu_sequential": "CPU Sequential",
+        "cpu_parallel": "CPU Parallel",
+        "gpu_sequential": "GPU Sequential",
+        "gpu_parallel": "GPU Parallel",
+    }
+    
+    strategy_colors = {
+        "cpu_sequential": "#3498db",  # Blue
+        "cpu_parallel": "#2ecc71",    # Green
+        "gpu_sequential": "#e74c3c",  # Red
+        "gpu_parallel": "#9b59b6",    # Purple
+    }
+    
+    # Group results by strategy and size
+    by_strategy = defaultdict(list)
+    by_size = defaultdict(list)
+    
+    for r in results:
+        strategy = r.get("strategy", "unknown")
+        by_strategy[strategy].append(r)
+        by_size[r["num_options"]].append(r)
+    
+    # Get sorted unique sizes
+    sizes = sorted(set(r["num_options"] for r in results))
+    strategies = ["cpu_sequential", "cpu_parallel", "gpu_sequential", "gpu_parallel"]
+    
+    # Extract data series for each strategy
+    data_by_strategy = {}
+    for strategy in strategies:
+        strat_results = sorted(by_strategy.get(strategy, []), key=lambda r: r["num_options"])
+        data_by_strategy[strategy] = {
+            "sizes": [r["num_options"] for r in strat_results],
+            "times": [r["duration_ms"] / 1000.0 for r in strat_results],  # Convert to seconds
+            "throughputs": [r["throughput_mops"] for r in strat_results],
+        }
+    
+    # Create figure with 2x3 grid
+    plt.style.use("seaborn-v0_8-darkgrid")
+    fig = plt.figure(figsize=(16, 12))
+    fig.suptitle(
+        f"Black-Scholes Benchmark: CPU vs GPU Comparison\n{metadata.get('platform', 'Unknown Platform')}",
+        fontsize=14,
+        fontweight="bold",
+    )
+    
+    # Chart 1: Execution Time Comparison (log-log)
+    ax1 = plt.subplot(2, 3, 1)
+    for strategy in strategies:
+        data = data_by_strategy[strategy]
+        if data["sizes"]:
+            ax1.loglog(data["sizes"], data["times"], "o-", 
+                      label=strategy_display.get(strategy, strategy),
+                      color=strategy_colors.get(strategy, "gray"),
+                      markersize=5, alpha=0.8)
+    
+    ax1.set_xlabel("Number of Options")
+    ax1.set_ylabel("Execution Time (s)")
+    ax1.legend(loc="upper left", fontsize=8)
+    ax1.set_title("Execution Time vs Problem Size", fontweight="bold")
+    ax1.grid(True, alpha=0.3, which="both")
+    
+    # Chart 2: Throughput Comparison (Million ops/sec)
+    ax2 = plt.subplot(2, 3, 2)
+    for strategy in strategies:
+        data = data_by_strategy[strategy]
+        if data["sizes"]:
+            ax2.semilogx(data["sizes"], data["throughputs"], "o-",
+                        label=strategy_display.get(strategy, strategy),
+                        color=strategy_colors.get(strategy, "gray"),
+                        markersize=5, alpha=0.8)
+    
+    ax2.set_xlabel("Number of Options")
+    ax2.set_ylabel("Throughput (M opts/s)")
+    ax2.legend(loc="upper left", fontsize=8)
+    ax2.set_title("Throughput vs Problem Size", fontweight="bold")
+    ax2.grid(True, alpha=0.3)
+    
+    # Chart 3: GPU Speedup vs CPU
+    ax3 = plt.subplot(2, 3, 3)
+    
+    # Calculate speedups: GPU Seq vs CPU Seq, GPU Par vs CPU Par
+    speedups_seq = []
+    speedups_par = []
+    speedup_sizes = []
+    
+    for size in sizes:
+        size_results = {r["strategy"]: r for r in by_size[size]}
+        
+        cpu_seq = size_results.get("cpu_sequential")
+        gpu_seq = size_results.get("gpu_sequential")
+        cpu_par = size_results.get("cpu_parallel")
+        gpu_par = size_results.get("gpu_parallel")
+        
+        if cpu_seq and gpu_seq:
+            speedup = cpu_seq["duration_ms"] / gpu_seq["duration_ms"] if gpu_seq["duration_ms"] > 0 else 0
+            speedups_seq.append(speedup)
+        else:
+            speedups_seq.append(0)
+            
+        if cpu_par and gpu_par:
+            speedup = cpu_par["duration_ms"] / gpu_par["duration_ms"] if gpu_par["duration_ms"] > 0 else 0
+            speedups_par.append(speedup)
+        else:
+            speedups_par.append(0)
+            
+        speedup_sizes.append(size)
+    
+    ax3.semilogx(speedup_sizes, speedups_seq, "o-", label="GPU Seq vs CPU Seq",
+                color=strategy_colors["gpu_sequential"], markersize=6, alpha=0.8)
+    ax3.semilogx(speedup_sizes, speedups_par, "s-", label="GPU Par vs CPU Par",
+                color=strategy_colors["gpu_parallel"], markersize=6, alpha=0.8)
+    ax3.axhline(y=1.0, color="black", linestyle="--", linewidth=2, label="Break-even")
+    ax3.set_xlabel("Number of Options")
+    ax3.set_ylabel("Speedup (CPU / GPU)")
+    ax3.set_title("GPU Speedup vs Problem Size", fontweight="bold")
+    ax3.legend(loc="best", fontsize=8)
+    ax3.grid(True, alpha=0.3)
+    
+    # Shade regions
+    ylim = ax3.get_ylim()
+    ax3.axhspan(0, 1.0, alpha=0.1, color="red")
+    ax3.axhspan(1.0, max(ylim[1], 2), alpha=0.1, color="green")
+    ax3.set_ylim(ylim)
+    
+    # Chart 4: Best Strategy Bar Chart
+    ax4 = plt.subplot(2, 3, 4)
+    
+    # Find best strategy for each size
+    best_by_size = []
+    for size in sizes:
+        size_results = by_size[size]
+        best = min(size_results, key=lambda r: r["duration_ms"])
+        best_by_size.append(best["strategy"])
+    
+    # Count wins per strategy
+    from collections import Counter
+    win_counts = Counter(best_by_size)
+    
+    strategies_ordered = ["cpu_sequential", "cpu_parallel", "gpu_sequential", "gpu_parallel"]
+    wins = [win_counts.get(s, 0) for s in strategies_ordered]
+    colors = [strategy_colors.get(s, "gray") for s in strategies_ordered]
+    labels = [strategy_display.get(s, s) for s in strategies_ordered]
+    
+    bars = ax4.bar(labels, wins, color=colors, alpha=0.8, edgecolor="black")
+    ax4.set_ylabel("Number of Wins")
+    ax4.set_title("Best Strategy by Problem Size", fontweight="bold")
+    ax4.grid(True, alpha=0.3, axis="y")
+    
+    for bar, win in zip(bars, wins):
+        if win > 0:
+            ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, str(win),
+                    ha='center', va='bottom', fontweight='bold')
+    
+    # Chart 5: Average Speedup by Size Range
+    ax5 = plt.subplot(2, 3, 5)
+    
+    ranges = [
+        (0, 10_000, "Tiny\n(<10K)"),
+        (10_000, 100_000, "Small\n(10K-100K)"),
+        (100_000, 1_000_000, "Medium\n(100K-1M)"),
+        (1_000_000, 10_000_000, "Large\n(1M-10M)"),
+        (10_000_000, 100_000_000, "Very Large\n(10M-100M)"),
+        (100_000_000, float('inf'), "Huge\n(>100M)"),
+    ]
+    
+    range_labels, avg_seq, avg_par = [], [], []
+    
+    for low, high, label in ranges:
+        mask = [i for i, size in enumerate(speedup_sizes) if low <= size < high]
+        if mask:
+            range_labels.append(label)
+            avg_seq.append(float(np.mean([speedups_seq[i] for i in mask])))
+            avg_par.append(float(np.mean([speedups_par[i] for i in mask])))
+    
+    if range_labels:
+        x = np.arange(len(range_labels))
+        width = 0.35
+        
+        colors_seq = ["#ff6b6b" if s < 1 else "#51cf66" for s in avg_seq]
+        colors_par = ["#ffb3b3" if s < 1 else "#a3e4a3" for s in avg_par]
+        
+        bars1 = ax5.bar(x - width/2, avg_seq, width, label="GPU Seq vs CPU Seq", color=colors_seq, alpha=0.9, edgecolor="black")
+        bars2 = ax5.bar(x + width/2, avg_par, width, label="GPU Par vs CPU Par", color=colors_par, alpha=0.9, edgecolor="black")
+        
+        ax5.axhline(y=1.0, color="black", linestyle="--", linewidth=2)
+        ax5.set_ylabel("Average Speedup (CPU / GPU)")
+        ax5.set_title("Average Speedup by Problem Size", fontweight="bold")
+        ax5.set_xticks(x)
+        ax5.set_xticklabels(range_labels, fontsize=8)
+        ax5.legend(loc="upper left", fontsize=8)
+        ax5.grid(True, alpha=0.3, axis="y")
+        
+        for bar, value in zip(bars1, avg_seq):
+            ax5.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{value:.1f}x',
+                    ha='center', va='bottom', fontsize=7)
+        for bar, value in zip(bars2, avg_par):
+            ax5.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{value:.1f}x',
+                    ha='center', va='bottom', fontsize=7)
+    
+    # Chart 6: Throughput Distribution (box plot)
+    ax6 = plt.subplot(2, 3, 6)
+    
+    throughput_data = []
+    box_labels = []
+    box_colors = []
+    
+    for strategy in strategies:
+        if by_strategy.get(strategy):
+            throughputs = [r["throughput_mops"] for r in by_strategy[strategy]]
+            throughput_data.append(throughputs)
+            box_labels.append(strategy_display.get(strategy, strategy).replace(" ", "\n"))
+            box_colors.append(strategy_colors.get(strategy, "gray"))
+    
+    if throughput_data:
+        bp = ax6.boxplot(throughput_data, patch_artist=True)
+        for patch, color in zip(bp["boxes"], box_colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        ax6.set_ylabel("Throughput (M opts/s)")
+        ax6.set_title("Throughput Distribution by Strategy", fontweight="bold")
+        ax6.set_xticklabels(box_labels, fontsize=8)
+        ax6.grid(True, alpha=0.3, axis="y")
+    
+    # Add config description
+    gpu_batch_size = metadata.get("gpu_batch_size", 10_000_000)
+    config_text = f"Platform: {metadata.get('platform', 'Unknown')}  |  GPU Batch Size: {format_number(gpu_batch_size)}  |  Test Sizes: {len(sizes)}  |  Total Tests: {len(results)}"
+    fig.text(
+        0.5, 0.01, config_text,
+        ha="center", va="bottom",
+        fontsize=9,
+        family="monospace",
+        bbox=dict(boxstyle="round,pad=0.5", facecolor="lightyellow", alpha=0.8, edgecolor="gray")
+    )
+    
+    plt.tight_layout(rect=[0, 0.04, 1, 0.95])
+    
+    # Save figure
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plot_file = output_dir / f"plot_{source_name}.png"
+    plt.savefig(plot_file, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"\nChart saved to: {plot_file}")
+    plt.close()
+    
+    # Print summary
+    print_unified_summary(results, metadata, speedups_seq, speedups_par, speedup_sizes, by_strategy)
+
+
+def print_unified_summary(results, metadata, speedups_seq, speedups_par, sizes, by_strategy):
+    """Print summary statistics for unified benchmark."""
+    print("\n" + "=" * 70)
+    print("          BLACK-SCHOLES BENCHMARK SUMMARY")
+    print("=" * 70)
+    print(f"Platform: {metadata.get('platform', 'Unknown')}")
+    print(f"Timestamp: {metadata.get('timestamp', 'Unknown')}")
+    print(f"GPU Batch Size: {format_number(metadata.get('gpu_batch_size', 10_000_000))}")
+    print(f"Total benchmarks: {len(results)}")
+    print(f"Problem sizes tested: {len(sizes)}")
+    
+    if sizes:
+        print(f"Problem size range: {format_number(min(sizes))} - {format_number(max(sizes))}")
+    
+    # Speedup statistics
+    if speedups_seq:
+        valid_seq = [s for s in speedups_seq if s > 0]
+        if valid_seq:
+            print(f"\nSpeedup Statistics (GPU Seq vs CPU Seq):")
+            print(f"  Min:    {min(valid_seq):.3f}x")
+            print(f"  Max:    {max(valid_seq):.3f}x")
+            print(f"  Mean:   {np.mean(valid_seq):.3f}x")
+            print(f"  Median: {np.median(valid_seq):.3f}x")
+    
+    if speedups_par:
+        valid_par = [s for s in speedups_par if s > 0]
+        if valid_par:
+            print(f"\nSpeedup Statistics (GPU Par vs CPU Par):")
+            print(f"  Min:    {min(valid_par):.3f}x")
+            print(f"  Max:    {max(valid_par):.3f}x")
+            print(f"  Mean:   {np.mean(valid_par):.3f}x")
+            print(f"  Median: {np.median(valid_par):.3f}x")
+    
+    # Win/Loss
+    if speedups_seq:
+        valid_seq = [s for s in speedups_seq if s > 0]
+        gpu_wins = sum(1 for s in valid_seq if s > 1.0)
+        print(f"\nWin/Loss (GPU Seq vs CPU Seq):")
+        print(f"  GPU wins: {gpu_wins} ({100 * gpu_wins / len(valid_seq):.1f}%)")
+        print(f"  CPU wins: {len(valid_seq) - gpu_wins} ({100 * (len(valid_seq) - gpu_wins) / len(valid_seq):.1f}%)")
+    
+    if speedups_par:
+        valid_par = [s for s in speedups_par if s > 0]
+        gpu_wins = sum(1 for s in valid_par if s > 1.0)
+        print(f"\nWin/Loss (GPU Par vs CPU Par):")
+        print(f"  GPU wins: {gpu_wins} ({100 * gpu_wins / len(valid_par):.1f}%)")
+        print(f"  CPU wins: {len(valid_par) - gpu_wins} ({100 * (len(valid_par) - gpu_wins) / len(valid_par):.1f}%)")
+    
+    # Best throughput per strategy
+    print(f"\nBest Throughput per Strategy:")
+    for strategy, strat_results in by_strategy.items():
+        if strat_results:
+            best = max(strat_results, key=lambda r: r["throughput_mops"])
+            print(f"  {strategy.replace('_', ' ').title()}: {best['throughput_mops']:.2f} M opts/s @ {format_number(best['num_options'])} options")
+    
+    # Find crossover point
+    crossover_idx = None
+    for i, s in enumerate(speedups_seq):
+        if s > 1.0:
+            crossover_idx = i
+            break
+    
+    if crossover_idx is not None:
+        print(f"\nGPU becomes faster at: ~{format_number(sizes[crossover_idx])} options")
+    
+    print("=" * 70)
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
@@ -947,10 +1348,9 @@ def main():
     """Main entry point for the unified plotting script."""
     if len(sys.argv) < 2:
         print("Usage: python benches/tools/plot_benchmark.py <benchmark_type|json_file>")
-        print("\nBenchmark types: standard, optimized, streaming, comparison")
+        print("\nBenchmark types: black_scholes")
         print("\nExamples:")
-        print("  python benches/tools/plot_benchmark.py standard")
-        print("  python benches/tools/plot_benchmark.py comparison")
+        print("  python benches/tools/plot_benchmark.py black_scholes")
         print("  python benches/tools/plot_benchmark.py path/to/benchmark.json")
         sys.exit(1)
 
@@ -965,7 +1365,7 @@ def main():
         if not filename:
             print(f"Error: No benchmark files found for type '{benchmark_type}'")
             print(f"\nRun the benchmark first with:")
-            print(f"  cargo bench --bench gpu_black_scholes_{benchmark_type} --features gpu-wgpu")
+            print(f"  cargo bench --bench gpu_black_scholes --features gpu-wgpu")
             sys.exit(1)
         
         print(f"Using most recent {benchmark_type} file: {filename}")
@@ -989,10 +1389,8 @@ def main():
     benchmark_type = get_benchmark_type(metadata, filename)
     
     if not benchmark_type:
-        print(f"Error: Could not determine benchmark type from file '{filename}'")
-        print("The file must contain 'benchmark_type' in metadata or have a recognizable filename pattern.")
-        print("Expected patterns: standard_benchmark_*, optimized_benchmark_*, streaming_benchmark_*, comparison_benchmark_*")
-        sys.exit(1)
+        # Default to black_scholes for new format
+        benchmark_type = "black_scholes"
 
     print(f"Detected benchmark type: {benchmark_type}")
 
@@ -1000,14 +1398,8 @@ def main():
     output_dir = filename.parent
     source_name = filename.stem
     
-    if benchmark_type == "comparison":
-        plot_comparison_results(results, metadata, source_name, output_dir)
-    elif benchmark_type == "streaming":
-        # Try new streaming format first, fall back to standard
-        if not plot_streaming_results(results, metadata, source_name, output_dir):
-            plot_standard_results(results, metadata, source_name, output_dir, benchmark_type)
-    else:
-        plot_standard_results(results, metadata, source_name, output_dir, benchmark_type)
+    # Use standard plotting for black_scholes (handles items_count format)
+    plot_standard_results(results, metadata, source_name, output_dir, benchmark_type)
 
 
 if __name__ == "__main__":

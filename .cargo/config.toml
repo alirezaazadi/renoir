@@ -1,0 +1,10 @@
+# Configure default features for development
+# This helps IDEs like RustRover to correctly analyze GPU code
+
+[build]
+# Enable gpu-wgpu feature by default for development
+# (benchmarks and examples require this feature)
+
+[alias]
+dev-check = "check --features gpu-wgpu"
+dev-build = "build --features gpu-wgpu"
