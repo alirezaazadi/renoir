@@ -1,6 +1,32 @@
-//! # Monte Carlo Benchmark with Validation and JSON Output
+//! # Monte Carlo Benchmark
 //!
-//! Compares CPU and GPU performance for Monte Carlo option pricing.
+//! Compares CPU and GPU performance for Monte Carlo option pricing using
+//! Renoir's streaming operators (`map` and `map_gpu_with_strategy`).
+//!
+//! ## Strategies Benchmarked
+//!
+//! 1. **CPU Sequential**: Single worker with `map(monte_carlo_cpu)`
+//! 2. **CPU Parallel**: Multiple workers with `map(monte_carlo_cpu)` + `shuffle()`
+//! 3. **GPU**: Single worker with `map_gpu_with_strategy` using `MonteCarloKernel`
+//!
+//! ## Usage
+//!
+//! ```bash
+//! # Run with WGPU backend (cross-platform: Metal, Vulkan, DirectX 12)
+//! cargo bench --bench gpu_monte_carlo --features gpu-wgpu
+//!
+//! # Run with CUDA backend (NVIDIA GPUs only)
+//! cargo bench --bench gpu_monte_carlo --features gpu-cuda
+//!
+//! # Run with custom max options (default is 300K due to high compute per option)
+//! MAX_OPTIONS=100000 cargo bench --bench gpu_monte_carlo --features gpu-wgpu
+//! ```
+//!
+//! ## Output
+//!
+//! Results are saved to `benches/results/monte_carlo/{date}/` as JSON files
+//! and automatically plotted using `benches/tools/plot_monte_carlo.py`.
+//!
 //! Features result validation, intermediate JSON saves, and chart generation support.
 
 use std::time::Instant;

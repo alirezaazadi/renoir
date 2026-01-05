@@ -1,4 +1,4 @@
-//! # Unified Black-Scholes Benchmark
+//! # Black-Scholes Benchmark
 //!
 //! Compares CPU and GPU performance for Black-Scholes option pricing using
 //! Renoir's streaming operators (`map` and `map_gpu_with_strategy`).
@@ -6,15 +6,17 @@
 //! ## Strategies Benchmarked
 //!
 //! 1. **CPU Sequential**: Single worker with `map(black_scholes_cpu)`
-//! 2. **CPU Parallel**: Multiple workers with `map(black_scholes_cpu)`
-//! 3. **GPU Simple**: Single worker with `map_gpu_with_strategy` (simple kernel)
-//! 4. **GPU Double-Buffered**: Single worker with double-buffered kernel
+//! 2. **CPU Parallel**: Multiple workers with `map(black_scholes_cpu)` + `shuffle()`
+//! 3. **GPU**: Single worker with `map_gpu_with_strategy` using `BlackScholesKernel`
 //!
 //! ## Usage
 //!
 //! ```bash
-//! # Run with default max (1B options)
+//! # Run with WGPU backend (cross-platform: Metal, Vulkan, DirectX 12)
 //! cargo bench --bench gpu_black_scholes --features gpu-wgpu
+//!
+//! # Run with CUDA backend (NVIDIA GPUs only)
+//! cargo bench --bench gpu_black_scholes --features gpu-cuda
 //!
 //! # Run with custom max options
 //! MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
