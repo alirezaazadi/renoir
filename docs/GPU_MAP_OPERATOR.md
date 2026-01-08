@@ -106,29 +106,29 @@ The fundamental design choice in processor architecture is the trade-off between
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THE FUNDAMENTAL TRADE-OFF                                     │
+│                    THE FUNDAMENTAL TRADE-OFF                                    │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   LATENCY-OPTIMIZED (CPU)                 THROUGHPUT-OPTIMIZED (GPU)            │
 │   ───────────────────────                 ──────────────────────────            │
-│                                                                                  │
+│                                                                                 │
 │   Goal: Minimize time to                  Goal: Maximize tasks                  │
 │         complete ONE task                       completed per second            │
-│                                                                                  │
+│                                                                                 │
 │   Strategy:                               Strategy:                             │
 │   • Large caches                          • Many simple cores                   │
 │   • Complex control logic                 • High memory bandwidth               │
 │   • High clock frequency                  • Massive parallelism                 │
 │   • Branch prediction                     • Thread-level parallelism            │
 │   • Out-of-order execution                • Hide latency with threads           │
-│                                                                                  │
+│                                                                                 │
 │   Best for:                               Best for:                             │
 │   • Sequential algorithms                 • Data-parallel workloads             │
 │   • Complex control flow                  • Regular memory access               │
 │   • Low-latency requirements              • High-throughput requirements        │
-│   • Operating systems                     • Scientific computing               │
+│   • Operating systems                     • Scientific computing                │
 │   • Database queries                      • Machine learning                    │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -140,35 +140,35 @@ CPUs are designed as general-purpose processors optimized for **low-latency** ex
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           CPU CORE ARCHITECTURE                                  │
+│                           CPU CORE ARCHITECTURE                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                        SINGLE CPU CORE                                   │   │
+│   │                        SINGLE CPU CORE                                  │   │
 │   │  ┌─────────────────────────────────────────────────────────────────┐    │   │
-│   │  │                    CONTROL LOGIC (~50%)                          │    │   │
+│   │  │                    CONTROL LOGIC (~50%)                         │    │   │
 │   │  │  ┌───────────────┐ ┌───────────────┐ ┌───────────────────────┐  │    │   │
 │   │  │  │    Branch     │ │  Out-of-Order │ │     Speculative       │  │    │   │
 │   │  │  │   Predictor   │ │   Execution   │ │      Execution        │  │    │   │
 │   │  │  └───────────────┘ └───────────────┘ └───────────────────────┘  │    │   │
 │   │  └─────────────────────────────────────────────────────────────────┘    │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
 │   │  ┌─────────────────┐  ┌─────────────────────────────────────────────┐   │   │
 │   │  │  EXECUTION      │  │              CACHE HIERARCHY                │   │   │
 │   │  │  UNITS (~10%)   │  │                  (~40%)                     │   │   │
-│   │  │  ┌───┐ ┌───┐    │  │  ┌────────────────────────────────────┐    │   │   │
-│   │  │  │ALU│ │ALU│    │  │  │  L1 Cache: 32-64 KB (Data + Inst)  │    │   │   │
-│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤    │   │   │
-│   │  │  │FPU│ │FPU│    │  │  │  L2 Cache: 256 KB - 1 MB           │    │   │   │
-│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤    │   │   │
-│   │  │  │AGU│ │AGU│    │  │  │  L3 Cache: 8 - 64 MB (shared)      │    │   │   │
-│   │  │  └───┘ └───┘    │  │  └────────────────────────────────────┘    │   │   │
+│   │  │  ┌───┐ ┌───┐    │  │  ┌────────────────────────────────────┐     │   │   │
+│   │  │  │ALU│ │ALU│    │  │  │  L1 Cache: 32-64 KB (Data + Inst)  │     │   │   │
+│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤     │   │   │
+│   │  │  │FPU│ │FPU│    │  │  │  L2 Cache: 256 KB - 1 MB           │     │   │   │
+│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤     │   │   │
+│   │  │  │AGU│ │AGU│    │  │  │  L3 Cache: 8 - 64 MB (shared)      │     │   │   │
+│   │  │  └───┘ └───┘    │  │  └────────────────────────────────────┘     │   │   │
 │   │  └─────────────────┘  └─────────────────────────────────────────────┘   │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
+│                                                                                 │
 │   ALU = Arithmetic Logic Unit    FPU = Floating Point Unit                      │
-│   AGU = Address Generation Unit                                                  │
-│                                                                                  │
+│   AGU = Address Generation Unit                                                 │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -203,9 +203,9 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           GPU ARCHITECTURE OVERVIEW                              │
+│                           GPU ARCHITECTURE OVERVIEW                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────────┐  │
 │  │                   STREAMING MULTIPROCESSOR (SM) × 40-144                  │  │
 │  │  ┌─────────────────────────────────────────────────────────────────────┐  │  │
@@ -227,22 +227,22 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 │  │  │  │              SPECIAL FUNCTION UNITS (sin, cos, exp, log)    │    │  │  │
 │  │  │  └─────────────────────────────────────────────────────────────┘    │  │  │
 │  │  │                                                                     │  │  │
-│  │  │  ┌─────────────────┐  ┌──────────────────────────────────────┐     │  │  │
-│  │  │  │ REGISTER FILE   │  │    SHARED MEMORY / L1 CACHE          │     │  │  │
-│  │  │  │   256 KB        │  │         48-164 KB                    │     │  │  │
-│  │  │  └─────────────────┘  └──────────────────────────────────────┘     │  │  │
+│  │  │  ┌─────────────────┐  ┌──────────────────────────────────────┐      │  │  │
+│  │  │  │ REGISTER FILE   │  │    SHARED MEMORY / L1 CACHE          │      │  │  │
+│  │  │  │   256 KB        │  │         48-164 KB                    │      │  │  │
+│  │  │  └─────────────────┘  └──────────────────────────────────────┘      │  │  │
 │  │  └─────────────────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                  │
+│                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐│
 │  │                           L2 CACHE (4-72 MB)                                ││
 │  └─────────────────────────────────────────────────────────────────────────────┘│
-│                                                                                  │
+│                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐│
 │  │              GLOBAL MEMORY (VRAM) - HBM2/GDDR6 - 8-80 GB                    ││
 │  │                    Memory Bandwidth: 500 - 3,000 GB/s                       ││
 │  └─────────────────────────────────────────────────────────────────────────────┘│
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -265,9 +265,9 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    CPU vs GPU ARCHITECTURE COMPARISON                            │
+│                    CPU vs GPU ARCHITECTURE COMPARISON                           │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   Metric              │ CPU (Modern Desktop)    │ GPU (Modern HPC)              │
 │   ────────────────────┼─────────────────────────┼───────────────────────────────│
 │   Cores               │ 8-24                    │ 5,000-16,000 (simple)         │
@@ -280,7 +280,7 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 │   Die Area (Compute)  │ ~10%                    │ ~70%                          │
 │   Power (TDP)         │ 65-250W                 │ 150-700W                      │
 │   Best For            │ Latency-sensitive       │ Throughput-intensive          │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -292,46 +292,46 @@ GPU memory is organized in a hierarchy that trades off capacity for access laten
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         GPU MEMORY HIERARCHY                                     │
+│                         GPU MEMORY HIERARCHY                                    │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│                              ┌────────────┐                                      │
-│                        Thread│ REGISTERS  │                                      │
+│                                                                                 │
+│                              ┌────────────┐                                     │
+│                        Thread│ REGISTERS  │                                     │
 │                              │ 255 max    │  ◄── Fastest: 1 cycle               │
-│                              │ per thread │      Highest bandwidth               │
-│                              └─────┬──────┘      Per-thread private              │
-│                                    │                                             │
-│                                    ▼                                             │
-│                    ┌───────────────────────────────┐                             │
+│                              │ per thread │      Highest bandwidth              │
+│                              └─────┬──────┘      Per-thread private             │
+│                                    │                                            │
+│                                    ▼                                            │
+│                    ┌───────────────────────────────┐                            │
 │               Block│     SHARED MEMORY / L1       │                             │
 │                    │       48 - 164 KB            │  ◄── Fast: 1-4 cycles       │
-│                    │       per SM                 │      ~10 TB/s bandwidth      │
-│                    │   (programmable scratchpad)  │      Shared within block     │
-│                    └───────────────┬───────────────┘                             │
-│                                    │                                             │
-│                                    ▼                                             │
-│              ┌─────────────────────────────────────────┐                         │
-│         GPU │              L2 CACHE                    │                         │
-│              │              4 - 72 MB                  │  ◄── Medium: ~200 cycles│
-│              │              (unified)                  │      ~4 TB/s bandwidth  │
-│              └───────────────────┬─────────────────────┘      Shared across SMs  │
-│                                  │                                               │
-│                                  ▼                                               │
-│       ┌──────────────────────────────────────────────────────┐                   │
-│  VRAM │             GLOBAL MEMORY (HBM2/GDDR6)               │                   │
-│       │                    8 - 80 GB                         │  ◄── Slow: ~500 cy│
-│       │              Bandwidth: 500-3000 GB/s                │      High capacity│
-│       └──────────────────────────┬───────────────────────────┘                   │
-│                                  │                                               │
-│                             PCIe/NVLink                                          │
-│                                  │                                               │
-│                                  ▼                                               │
-│      ┌───────────────────────────────────────────────────────────┐               │
-│ Host │               SYSTEM MEMORY (CPU RAM)                     │               │
-│      │                    16 - 256+ GB                           │  ◄── Slowest  │
-│      │              Bandwidth: 16-64 GB/s via PCIe               │      ~10K cy  │
-│      └───────────────────────────────────────────────────────────┘               │
-│                                                                                  │
+│                    │       per SM                 │      ~10 TB/s bandwidth     │
+│                    │   (programmable scratchpad)  │      Shared within block    │
+│                    └───────────────┬───────────────┘                            │
+│                                    │                                            │
+│                                    ▼                                            │
+│              ┌─────────────────────────────────────────┐                        │
+│         GPU │              L2 CACHE                    │                        │
+│              │              4 - 72 MB                  │ ◄── Medium: ~200 cycles│
+│              │              (unified)                  │     ~4 TB/s bandwidth  │
+│              └───────────────────┬─────────────────────┘     Shared across SMs  │
+│                                  │                                              │
+│                                  ▼                                              │
+│       ┌──────────────────────────────────────────────────────┐                  │
+│  VRAM │             GLOBAL MEMORY (HBM2/GDDR6)               │                  │
+│       │                    8 - 80 GB                         │ ◄── Slow: ~500 cy│
+│       │              Bandwidth: 500-3000 GB/s                │     High capacity│
+│       └──────────────────────────┬───────────────────────────┘                  │
+│                                  │                                              │
+│                             PCIe/NVLink                                         │
+│                                  │                                              │
+│                                  ▼                                              │
+│      ┌───────────────────────────────────────────────────────────┐              │
+│ Host │               SYSTEM MEMORY (CPU RAM)                     │              │
+│      │                    16 - 256+ GB                           │ ◄── Slowest  │
+│      │              Bandwidth: 16-64 GB/s via PCIe               │     ~10K cy  │
+│      └───────────────────────────────────────────────────────────┘              │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -356,12 +356,12 @@ Modern GPUs use the **Single Instruction, Multiple Threads (SIMT)** execution mo
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         SIMD vs SIMT COMPARISON                                  │
+│                         SIMD vs SIMT COMPARISON                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   SIMD (CPU Vector Extensions)              SIMT (GPU Execution Model)          │
 │   ─────────────────────────────             ────────────────────────            │
-│                                                                                  │
+│                                                                                 │
 │   ┌─────────────────────────┐              ┌─────────────────────────┐          │
 │   │  Vector Register        │              │  Warp (32 threads)      │          │
 │   │  ┌───┬───┬───┬───┐      │              │  ┌───┬───┬───┬───┬...┐  │          │
@@ -373,13 +373,13 @@ Modern GPUs use the **Single Instruction, Multiple Threads (SIMT)** execution mo
 │   │  │ (vector add 4×) │    │              │  │  (32 threads)   │    │          │
 │   │  └─────────────────┘    │              │  └─────────────────┘    │          │
 │   └─────────────────────────┘              └─────────────────────────┘          │
-│                                                                                  │
+│                                                                                 │
 │   • Programmer explicitly                  • Each thread has independent        │
 │     manages vector operations                program counter (logically)        │
 │   • Fixed vector width                     • Hardware manages divergence        │
 │   • No concept of threads                  • Threads can have unique state      │
 │   • Programmer handles masking             • Automatic predication              │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -402,33 +402,33 @@ Threads are organized into groups that execute in lockstep [1][2]:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THREAD HIERARCHY IN GPU COMPUTING                             │
+│                    THREAD HIERARCHY IN GPU COMPUTING                            │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Grid (All threads launched by a kernel)                                        │
+│                                                                                 │
+│   Grid (All threads launched by a kernel)                                       │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                                                                          │   │
-│   │   Block 0              Block 1              Block 2         ...          │   │
-│   │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │   │
-│   │   │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │          │   │
-│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │          │   │
-│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │          │   │
-│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │          │   │
-│   │   │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │          │   │
-│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │          │   │
-│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │          │   │
-│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │          │   │
-│   │   └─────────────────┘  └─────────────────┘  └─────────────────┘          │   │
-│   │         │                                                                │   │
-│   │   Shared Memory                                                          │   │
-│   │   (per block)                                                            │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
+│   │   Block 0              Block 1              Block 2         ...         │   │
+│   │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │   │
+│   │   │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │         │   │
+│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │         │   │
+│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │         │   │
+│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │         │   │
+│   │   │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │         │   │
+│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │         │   │
+│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │         │   │
+│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │         │   │
+│   │   └─────────────────┘  └─────────────────┘  └─────────────────┘         │   │
+│   │         │                                                               │   │
+│   │   Shared Memory                                                         │   │
+│   │   (per block)                                                           │   │
+│   │                                                                         │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   Warp = 32 threads executing SAME instruction in lockstep                       │
-│   Block = Multiple warps sharing the same shared memory                          │
-│   Grid = All blocks launched by a single kernel                                  │
-│                                                                                  │
+│                                                                                 │
+│   Warp = 32 threads executing SAME instruction in lockstep                      │
+│   Block = Multiple warps sharing the same shared memory                         │
+│   Grid = All blocks launched by a single kernel                                 │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -437,22 +437,22 @@ Threads are organized into groups that execute in lockstep [1][2]:
 When threads within a warp take different branches, the GPU serializes execution [1][2]:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         BRANCH DIVERGENCE                                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Code:                                                                          │
-│   ┌─────────────────────────────────────┐                                        │
-│   │ if (threadIdx.x < 16) {             │                                        │
-│   │     path_A();  // Threads 0-15      │                                        │
-│   │ } else {                            │                                        │
-│   │     path_B();  // Threads 16-31     │                                        │
-│   │ }                                   │                                        │
-│   └─────────────────────────────────────┘                                        │
-│                                                                                  │
-│   Execution Timeline:                                                            │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                                                                          │   │
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         BRANCH DIVERGENCE                                      │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│   Code:                                                                        │
+│   ┌─────────────────────────────────────┐                                      │
+│   │ if (threadIdx.x < 16) {             │                                      │
+│   │     path_A();  // Threads 0-15      │                                      │
+│   │ } else {                            │                                      │
+│   │     path_B();  // Threads 16-31     │                                      │
+│   │ }                                   │                                      │
+│   └─────────────────────────────────────┘                                      │
+│                                                                                │
+│   Execution Timeline:                                                          │
+│   ┌────────────────────────────────────────────────────────────────────────┐   │
+│   │                                                                        │   │
 │   │   Time →   ║ Before Branch ║  path_A()  ║  path_B()  ║ After Branch    │   │
 │   │   ─────────╬───────────────╬────────────╬────────────╬─────────────────│   │
 │   │   Threads  ║               ║            ║            ║                 │   │
@@ -461,12 +461,11 @@ When threads within a warp take different branches, the GPU serializes execution
 │   │            ║               ║            ║            ║                 │   │
 │   │   Total    ║   32 active   ║ 16 active  ║ 16 active  ║   32 active     │   │
 │   │   Cycles   ║      N        ║     M      ║     M      ║      P          │   │
-│   │                                                                          │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   Performance Impact: Both paths execute sequentially, doubling the time         │
-│   Best Practice: Minimize divergence; align branches with warp boundaries        │
-│                                                                                  │
+│   └────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                │
+│   Performance Impact: Both paths execute sequentially, doubling the time       │
+│   Best Practice: Minimize divergence; align branches with warp boundaries      │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -516,34 +515,34 @@ GPUs hide memory latency through **massive thread-level parallelism** rather tha
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           LATENCY HIDING                                         │
+│                           LATENCY HIDING                                        │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   Problem: Memory access takes ~500 cycles, but ALU operations take ~4 cycles   │
-│                                                                                  │
-│   Solution: Execute other warps while waiting for memory                         │
-│                                                                                  │
-│   Time (cycles) →                                                                │
+│                                                                                 │
+│   Solution: Execute other warps while waiting for memory                        │
+│                                                                                 │
+│   Time (cycles) →                                                               │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │0       100      200      300      400      500      600      700        │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
 │   │Warp 0: [Compute]──►[Memory Load ═══════════════════════►][Compute]──►   │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
 │   │Warp 1:           [Compute]──►[Memory Load ═════════════════════►]       │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
 │   │Warp 2:                     [Compute]──►[Memory Load ═══════════════►]   │   │
-│   │                                                                          │   │
+│   │                                                                         │   │
 │   │Warp 3:                               [Compute]──►[Memory Load ═════►]   │   │
-│   │                                                                          │   │
-│   │        ...more warps...                                                  │   │
-│   │                                                                          │   │
-│   │SM keeps switching between warps, so ALUs are always busy!                │   │
+│   │                                                                         │   │
+│   │        ...more warps...                                                 │   │
+│   │                                                                         │   │
+│   │SM keeps switching between warps, so ALUs are always busy!               │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   Required Occupancy for Full Latency Hiding:                                    │
-│   Warps Needed ≥ Memory Latency (cycles) / Compute Latency (cycles)              │
-│   Example: 500 / 4 = 125 warps (if possible)                                     │
-│                                                                                  │
+│                                                                                 │
+│   Required Occupancy for Full Latency Hiding:                                   │
+│   Warps Needed ≥ Memory Latency (cycles) / Compute Latency (cycles)             │
+│   Example: 500 / 4 = 125 warps (if possible)                                    │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -553,44 +552,43 @@ For optimal memory bandwidth utilization, threads in a warp should access **cont
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         MEMORY COALESCING                                        │
+│                         MEMORY COALESCING                                       │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   COALESCED ACCESS (Optimal):                                                    │
+│                                                                                 │
+│   COALESCED ACCESS (Optimal):                                                   │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │   Thread:    T0   T1   T2   T3   T4   T5   T6   T7  ...  T31            │   │
 │   │              ↓    ↓    ↓    ↓    ↓    ↓    ↓    ↓        ↓              │   │
 │   │   Memory:   [0]  [1]  [2]  [3]  [4]  [5]  [6]  [7] ... [31]             │   │
-│   │              └────────────────────────────────────────────┘              │   │
-│   │                        ONE 128-byte transaction                          │   │
+│   │              └────────────────────────────────────────────┘             │   │
+│   │                        ONE 128-byte transaction                         │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   STRIDED ACCESS (Inefficient):                                                  │
+│                                                                                 │
+│   STRIDED ACCESS (Inefficient):                                                 │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread:    T0        T1        T2        T3       ...                  │   │
-│   │              ↓         ↓         ↓         ↓                             │   │
+│   │   Thread:    T0        T1        T2        T3       ...                 │   │
+│   │              ↓         ↓         ↓         ↓                            │   │
 │   │   Memory:   [0] [_]   [2] [_]   [4] [_]   [6] [_]  ...    (stride=2)    │   │
-│   │              └─┘       └─┘       └─┘       └─┘                            │   │
-│   │              MULTIPLE transactions - 50% bandwidth wasted                │   │
+│   │              └─┘       └─┘       └─┘       └─┘                          │   │
+│   │              MULTIPLE transactions - 50% bandwidth wasted               │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   RANDOM ACCESS (Worst):                                                         │
+│                                                                                 │
+│   RANDOM ACCESS (Worst):                                                        │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread:    T0            T1              T2           T3  ...          │   │
-│   │              ↓              ↓               ↓            ↓               │   │
+│   │   Thread:    T0            T1              T2           T3  ...         │   │
+│   │              ↓              ↓               ↓            ↓              │   │
 │   │   Memory:   [7]   [...]   [100]   [...]   [42]  [...]  [999] ...        │   │
-│   │              └┘            └─┘             └─┘          └───┘            │   │
-│   │              32 separate transactions - minimal bandwidth utilization    │   │
+│   │              └┘            └─┘             └─┘          └───┘           │   │
+│   │              32 separate transactions - minimal bandwidth utilization   │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   Performance Impact:                                                            │
+│                                                                                 │
+│   Performance Impact:                                                           │
 │   │ Access Pattern  │ Transactions │ Effective Bandwidth │                      │
 │   │─────────────────│──────────────│─────────────────────│                      │
 │   │ Coalesced       │      1       │      100%           │                      │
 │   │ Stride-2        │      2       │       50%           │                      │
 │   │ Stride-4        │      4       │       25%           │                      │
 │   │ Random          │     32       │      ~3%            │                      │
-│                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -600,41 +598,41 @@ GPUs can process multiple data elements per thread using **vector types** [5]. T
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           VECTORIZATION                                          │
+│                           VECTORIZATION                                         │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Scalar Operation (1 element per thread, per instruction):                      │
+│                                                                                 │
+│   Scalar Operation (1 element per thread, per instruction):                     │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread T0:  load a[0] → add → store result[0]                          │   │
-│   │   Thread T1:  load a[1] → add → store result[1]                          │   │
-│   │   ...                                                                    │   │
-│   │   Thread T31: load a[31] → add → store result[31]                        │   │
-│   │                                                                          │   │
+│   │   Thread T0:  load a[0] → add → store result[0]                         │   │
+│   │   Thread T1:  load a[1] → add → store result[1]                         │   │
+│   │   ...                                                                   │   │
+│   │   Thread T31: load a[31] → add → store result[31]                       │   │
+│   │                                                                         │   │
 │   │   Instructions per warp: 32 loads + 32 adds + 32 stores = 96            │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   Vectorized Operation (4 elements per thread, per instruction - float4):        │
+│                                                                                 │
+│   Vectorized Operation (4 elements per thread, per instruction - float4):       │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread T0:  load4 a[0:3]   → add4 → store4 result[0:3]                 │   │
-│   │   Thread T1:  load4 a[4:7]   → add4 → store4 result[4:7]                 │   │
-│   │   ...                                                                    │   │
-│   │   Thread T7:  load4 a[28:31] → add4 → store4 result[28:31]               │   │
-│   │                                                                          │   │
+│   │   Thread T0:  load4 a[0:3]   → add4 → store4 result[0:3]                │   │
+│   │   Thread T1:  load4 a[4:7]   → add4 → store4 result[4:7]                │   │
+│   │   ...                                                                   │   │
+│   │   Thread T7:  load4 a[28:31] → add4 → store4 result[28:31]              │   │
+│   │                                                                         │   │
 │   │   Instructions per 8 threads: 8 loads + 8 adds + 8 stores = 24          │   │
-│   │   (4× fewer threads needed, 4× fewer instructions)                       │   │
+│   │   (4× fewer threads needed, 4× fewer instructions)                      │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                  │
-│   CubeCL Vectorization Example:                                                  │
-│   ```rust                                                                        │
+│                                                                                 │
+│   CubeCL Vectorization Example:                                                 │
+│   ```rust                                                                       │
 │   // Line<f32> with vectorization_factor=4 processes 4 floats at once           │
-│   #[cube]                                                                        │
+│   #[cube]                                                                       │
 │   fn add_vectors<F: Float>(a: &Array<Line<F>>, b: &Array<Line<F>>,              │
 │                            out: &mut Array<Line<F>>) {                          │
-│       let idx = ABSOLUTE_POS;                                                    │
+│       let idx = ABSOLUTE_POS;                                                   │
 │       out[idx] = a[idx] + b[idx];  // Adds 4 floats simultaneously              │
-│   }                                                                              │
-│   ```                                                                            │
-│                                                                                  │
+│   }                                                                             │
+│   ```                                                                           │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -770,40 +768,40 @@ The `MapGpu` operator implements **async pipelining** for optimal GPU utilizatio
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
 │                           MapGpu Operator (Async Pipelined)                          │
-│                                                                                       │
+│                                                                                      │
 │  ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────────┐    │
 │  │    Upstream     │      │   Kernel Buffer    │      │     Output Queue        │    │
 │  │    Operator     │─────▶│   (SoA format,     │      │   (results to emit      │    │
 │  │    .next()      │      │    push() items)   │      │    one by one)          │    │
 │  └─────────────────┘      └──────────┬─────────┘      └────────────┬────────────┘    │
-│                                      │                              ▲                 │
-│                                      │ flush_to_gpu()               │                 │
-│                                      ▼                              │                 │
+│                                      │                              ▲                │
+│                                      │ flush_to_gpu()               │                │
+│                                      ▼                              │                │
 │  ┌───────────────────────────────────────────────────────────────────────────────┐   │
-│  │                          ASYNC PIPELINING                                      │   │
-│  │                                                                                │   │
-│  │   Batch N-1 (pending)              Batch N (current)                           │   │
-│  │   ┌─────────────────────┐          ┌─────────────────────┐                     │   │
-│  │   │  pending_handles    │          │  Launch kernel      │                     │   │
-│  │   │  pending_timestamps │◀─────────│  (async, no sync!)  │                     │   │
-│  │   └──────────┬──────────┘          └─────────────────────┘                     │   │
-│  │              │                                                                  │   │
-│  │              │ read_one() + bytemuck::cast_slice()                             │   │
-│  │              ▼                                                                  │   │
-│  │   ┌─────────────────────┐                                                      │   │
-│  │   │  Results from N-1   │──────────────────────────────────────────────────────┼───▶
-│  │   │  (matched with      │                                                      │   │
-│  │   │   timestamps)       │                                                      │   │
-│  │   └─────────────────────┘                                                      │   │
-│  │                                                                                │   │
-│  │   At end of stream: drain() collects final pending results                     │   │
+│  │                          ASYNC PIPELINING                                     │   │
+│  │                                                                               │   │
+│  │   Batch N-1 (pending)              Batch N (current)                          │   │
+│  │   ┌─────────────────────┐          ┌─────────────────────┐                    │   │
+│  │   │  pending_handles    │          │  Launch kernel      │                    │   │
+│  │   │  pending_timestamps │◀─────────│  (async, no sync!)  │                    │   │
+│  │   └──────────┬──────────┘          └─────────────────────┘                    │   │
+│  │              │                                                                │   │
+│  │              │ read_one() + bytemuck::cast_slice()                            │   │
+│  │              ▼                                                                │   │
+│  │   ┌─────────────────────┐                                                     │   │
+│  │   │  Results from N-1   │─────────────────────────────────────────────────────┼───▶
+│  │   │  (matched with      │                                                     │   │
+│  │   │   timestamps)       │                                                     │   │
+│  │   └─────────────────────┘                                                     │   │
+│  │                                                                               │   │
+│  │   At end of stream: drain() collects final pending results                    │   │
 │  └───────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                       │
-│  Batching Strategy:                                                                   │
-│  - Fixed: flush every N items (default: 10M)                                          │
-│  - Timed: flush on timeout OR max size                                                │
-│  - Adaptive: adapt batch size based on throughput                                     │
-│                                                                                       │
+│                                                                                      │
+│  Batching Strategy:                                                                  │
+│  - Fixed: flush every N items (default: 10M)                                         │
+│  - Timed: flush on timeout OR max size                                               │
+│  - Adaptive: adapt batch size based on throughput                                    │
+│                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1624,9 +1622,9 @@ Each batch in the pipelined execution incurs the following overhead:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    PER-BATCH OVERHEAD BREAKDOWN                                  │
+│                    PER-BATCH OVERHEAD BREAKDOWN                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   Phase                          │ Time (5M batch) │ % of Batch Time            │
 │   ───────────────────────────────┼─────────────────┼────────────────────────────│
 │   Collect Previous Results       │ ~21-25 ms       │ 90-92%                     │
@@ -1634,10 +1632,10 @@ Each batch in the pipelined execution incurs the following overhead:
 │   Kernel Launch                  │ ~0.01 ms        │ <0.1%                      │
 │   ───────────────────────────────┼─────────────────┼────────────────────────────│
 │   TOTAL (async, no sync wait)    │ ~23-25 ms       │ 100%                       │
-│                                                                                  │
-│   Key Observation: "Collect Previous" dominates!                                 │
+│                                                                                 │
+│   Key Observation: "Collect Previous" dominates!                                │
 │   This is the PCIe/memory bandwidth bottleneck for result transfer.             │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1650,32 +1648,32 @@ Each batch in the pipelined execution incurs the following overhead:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    SINGLE BATCH vs MULTI-BATCH EXECUTION                         │
+│                    SINGLE BATCH vs MULTI-BATCH EXECUTION                        │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Single Batch (1M items, batch_size=5M):                                        │
-│   ┌──────────────────────────────────────────────────────────┐                   │
-│   │ [Kernel 1] ───────────────────────────> [Collect]        │                   │
-│   └──────────────────────────────────────────────────────────┘                   │
-│   Total: 1 launch + 1 collect = minimal overhead                                 │
-│                                                                                  │
-│   Multi-Batch (50M items, batch_size=5M = 10 batches):                           │
-│   ┌─────────────────────────────────────────────────────────────────────────┐    │
-│   │ [K1]──►[Collect1]──►[K2]──►[Collect2]──► ... ──►[K10]──►[Collect10]     │    │
-│   │     ↑              ↑              ↑                                      │    │
-│   │ Sync Point     Sync Point     Sync Point (9 total sync points)          │    │
-│   └─────────────────────────────────────────────────────────────────────────┘    │
-│   Total: 10 launches + 10 collects + 9 synchronizations                          │
-│                                                                                  │
-│   Even with async pipelining (overlapping execution):                            │
-│   ┌─────────────────────────────────────────────────────────────────────────┐    │
-│   │ [K1]──────────►                                                          │    │
-│   │        [Collect1 + K2]──────────►                                        │    │
-│   │                        [Collect2 + K3]──────────►                        │    │
-│   │                                            ...                           │    │
-│   └─────────────────────────────────────────────────────────────────────────┘    │
-│   Still: N-1 sequential collect operations that cannot be parallelized           │
-│                                                                                  │
+│                                                                                 │
+│   Single Batch (1M items, batch_size=5M):                                       │
+│   ┌──────────────────────────────────────────────────────────┐                  │
+│   │ [Kernel 1] ───────────────────────────> [Collect]        │                  │
+│   └──────────────────────────────────────────────────────────┘                  │
+│   Total: 1 launch + 1 collect = minimal overhead                                │
+│                                                                                 │
+│   Multi-Batch (50M items, batch_size=5M = 10 batches):                          │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ [K1]──►[Collect1]──►[K2]──►[Collect2]──► ... ──►[K10]──►[Collect10]     │   │
+│   │     ↑              ↑              ↑                                     │   │
+│   │ Sync Point     Sync Point     Sync Point (9 total sync points)          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│   Total: 10 launches + 10 collects + 9 synchronizations                         │
+│                                                                                 │
+│   Even with async pipelining (overlapping execution):                           │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │ [K1]──────────►                                                         │   │
+│   │        [Collect1 + K2]──────────►                                       │   │
+│   │                        [Collect2 + K3]──────────►                       │   │
+│   │                                            ...                          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│   Still: N-1 sequential collect operations that cannot be parallelized          │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1689,11 +1687,11 @@ The second performance drop at very large problem sizes (100M+ options) is cause
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    L2 CACHE BEHAVIOR BY PROBLEM SIZE                             │
+│                    L2 CACHE BEHAVIOR BY PROBLEM SIZE                            │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
+│                                                                                 │
 │   GPU L2 Cache Size: 4-8 MB (Apple Silicon), 4-72 MB (discrete GPUs)            │
-│                                                                                  │
+│                                                                                 │
 │   Problem Size │ Working Set Size │ L2 Cache Status                             │
 │   ─────────────┼──────────────────┼─────────────────────────────────────────────│
 │   1M options   │    28 MB         │ Partial fit, good reuse                     │
@@ -1701,10 +1699,10 @@ The second performance drop at very large problem sizes (100M+ options) is cause
 │   10M options  │   280 MB         │ Severe thrashing                            │
 │   100M options │   2.8 GB         │ Complete thrashing (70-700× cache size)     │
 │   1B options   │    28 GB         │ Continuous cache misses                     │
-│                                                                                  │
+│                                                                                 │
 │   Impact: Every memory access becomes a cache miss at large sizes               │
 │           Full global memory latency (~500 cycles) for all accesses             │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1735,26 +1733,26 @@ the actual bottleneck is the streaming/batching overhead, not raw bandwidth.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THERMAL BEHAVIOR OVER TIME                                    │
+│                    THERMAL BEHAVIOR OVER TIME                                   │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   GPU Frequency                                                                  │
-│       │                                                                          │
-│   Max ├────╲                                                                     │
-│       │     ╲                                                                    │
-│   90% │      ╲____                                                               │
-│       │           ╲                                                              │
-│   80% │            ╲_______                                                      │
-│       │                    ╲_________ Thermal Throttle Zone                      │
-│   70% │                                                                          │
-│       └─────────────────────────────────────────────────────────────────── Time  │
-│       0s    10s    30s    60s   120s   300s                                      │
-│                                                                                  │
-│   Small problems: Complete before throttling kicks in                            │
-│   Large problems (100M+): Run long enough to hit thermal limits                  │
-│                                                                                  │
+│                                                                                 │
+│   GPU Frequency                                                                 │
+│       │                                                                         │
+│   Max ├────╲                                                                    │
+│       │     ╲                                                                   │
+│   90% │      ╲____                                                              │
+│       │           ╲                                                             │
+│   80% │            ╲_______                                                     │
+│       │                    ╲_________ Thermal Throttle Zone                     │
+│   70% │                                                                         │
+│       └─────────────────────────────────────────────────────────────────── Time │
+│       0s    10s    30s    60s   120s   300s                                     │
+│                                                                                 │
+│   Small problems: Complete before throttling kicks in                           │
+│   Large problems (100M+): Run long enough to hit thermal limits                 │
+│                                                                                 │
 │   Observation: First batches in a long run are faster than later batches        │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1762,31 +1760,31 @@ the actual bottleneck is the streaming/batching overhead, not raw bandwidth.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    APPLE SILICON UNIFIED MEMORY ARCHITECTURE                     │
+│                    APPLE SILICON UNIFIED MEMORY ARCHITECTURE                    │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│                        ┌─────────────────────────┐                               │
-│                        │   Unified Memory Pool   │                               │
-│                        │      (16-128 GB)        │                               │
-│                        └───────────┬─────────────┘                               │
-│                                    │                                             │
-│                    ┌───────────────┼───────────────┐                             │
-│                    │               │               │                             │
-│                    ▼               ▼               ▼                             │
-│           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
-│           │  CPU Cores  │  │    GPU      │  │   Neural    │                      │
-│           │   (P + E)   │  │   Cores     │  │   Engine    │                      │
-│           └─────────────┘  └─────────────┘  └─────────────┘                      │
-│                                                                                  │
+│                                                                                 │
+│                        ┌─────────────────────────┐                              │
+│                        │   Unified Memory Pool   │                              │
+│                        │      (16-128 GB)        │                              │
+│                        └───────────┬─────────────┘                              │
+│                                    │                                            │
+│                    ┌───────────────┼───────────────┐                            │
+│                    │               │               │                            │
+│                    ▼               ▼               ▼                            │
+│           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                     │
+│           │  CPU Cores  │  │    GPU      │  │   Neural    │                     │
+│           │   (P + E)   │  │   Cores     │  │   Engine    │                     │
+│           └─────────────┘  └─────────────┘  └─────────────┘                     │
+│                                                                                 │
 │   Advantage: No PCIe transfer needed (data already in shared memory)            │
 │   Disadvantage: All processors compete for same memory bandwidth                │
-│                                                                                  │
-│   At large problem sizes:                                                        │
+│                                                                                 │
+│   At large problem sizes:                                                       │
 │   - CPU threads (benchmark overhead) compete with GPU for memory                │
-│   - Memory controller becomes bottleneck                                         │
+│   - Memory controller becomes bottleneck                                        │
 │   - TLB (Translation Lookaside Buffer) pressure increases                       │
-│   - Page table walks become more frequent                                        │
-│                                                                                  │
+│   - Page table walks become more frequent                                       │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1809,32 +1807,32 @@ The benchmark results show CPU Parallel winning at **all problem sizes** on Appl
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    CPU PARALLEL vs GPU STREAMING OVERHEAD                        │
+│                    CPU PARALLEL vs GPU STREAMING OVERHEAD                       │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   CPU Parallel Execution:                                                        │
+│                                                                                 │
+│   CPU Parallel Execution:                                                       │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │ Thread 0: [Process item 0] [Process item 12] [Process item 24] ...      │   │
 │   │ Thread 1: [Process item 1] [Process item 13] [Process item 25] ...      │   │
-│   │ ...                                                                      │   │
+│   │ ...                                                                     │   │
 │   │ Thread 11:[Process item 11][Process item 23] [Process item 35] ...      │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │   → Direct processing, no batching, no synchronization points                   │
-│                                                                                  │
-│   GPU Streaming Execution:                                                       │
+│                                                                                 │
+│   GPU Streaming Execution:                                                      │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │ [Collect items into batch] →                                             │   │
-│   │   [Convert AoS → SoA] →                                                  │   │
-│   │     [Allocate GPU buffers] →                                             │   │
-│   │       [Copy to GPU] →                                                    │   │
-│   │         [Launch kernel] →                                                │   │
-│   │           [Wait for completion] →                                        │   │
-│   │             [Copy results back] →                                        │   │
-│   │               [Convert SoA → AoS] →                                      │   │
-│   │                 [Emit results]                                           │   │
+│   │ [Collect items into batch] →                                            │   │
+│   │   [Convert AoS → SoA] →                                                 │   │
+│   │     [Allocate GPU buffers] →                                            │   │
+│   │       [Copy to GPU] →                                                   │   │
+│   │         [Launch kernel] →                                               │   │
+│   │           [Wait for completion] →                                       │   │
+│   │             [Copy results back] →                                       │   │
+│   │               [Convert SoA → AoS] →                                     │   │
+│   │                 [Emit results]                                          │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │   → Many steps, each with overhead; amortized over batch but never zero         │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2243,41 +2241,54 @@ The GPU acceleration module is organized into several directories for maintainab
 
 ### Directory Layout
 
+The following structure shows the GPU-related files within the broader project:
+
 ```
-renoir/
-├── Cargo.toml                     # Project manifest with GPU feature flags
-├── docs/
-│   └── GPU_MAP_OPERATOR.md        # This documentation
-├── src/
-│   ├── lib.rs                     # Library entry point
-│   ├── operator/
-│   │   └── gpu/                   # GPU operator implementation
-│   │       ├── mod.rs             # Module exports
-│   │       ├── map_gpu.rs         # MapGpu operator
-│   │       ├── context.rs         # GpuContext wrapper
-│   │       └── batch_strategy.rs  # Batching strategies
-│   └── utils/
-│       └── mod.rs                 # Utilities (banners, tables)
-├── examples/
-│   ├── kernels/                   # Reusable GPU kernels
-│   │   ├── mod.rs                 # Kernel module exports
-│   │   ├── black_scholes.rs       # Black-Scholes kernel implementation
-│   │   └── monte_carlo.rs         # Monte Carlo kernel implementation
-│   ├── black_scholes_gpu.rs       # Black-Scholes Renoir streaming example
-│   ├── monte_carlo_comparison.rs  # Monte Carlo GPU vs CPU comparison example
-│   └── gpu_batching_strategies.rs # Batching strategies demo
-└── benches/
-    ├── gpu/                       # Unified GPU benchmarks directory
-    │   ├── common.rs              # Shared utilities (BenchmarkType, file paths, SystemConfig)
-    │   ├── black_scholes.rs       # Black-Scholes CPU vs GPU benchmark
-    │   └── monte_carlo.rs         # Monte Carlo CPU vs GPU benchmark
-    ├── results/                   # Benchmark output files (organized by type and date)
-    │   ├── black_scholes/         # Black-Scholes benchmark results
-    │   │   └── YYYY-MM-DD/        # Date-organized subdirectories
-    │   └── monte_carlo/           # Monte Carlo benchmark results
-    │       └── YYYY-MM-DD/
-    └── tools/                     # Analysis scripts
-        └── plot_benchmark.py      # Unified plotting tool for all benchmark types
+.
+├── benches
+│   ├── batch_mode.rs
+│   ├── caching.rs
+│   ├── collatz.rs
+│   ├── common.rs
+│   ├── connected.rs
+│   ├── fold_vs_reduce.rs
+│   ├── gpu                            # GPU benchmarks
+│   │   ├── black_scholes.rs           # Black-Scholes CPU vs GPU benchmark
+│   │   ├── common.rs                  # Shared utilities
+│   │   ├── mod.rs                     # Module exports
+│   │   └── monte_carlo.rs             # Monte Carlo CPU vs GPU benchmark
+│   ├── kafka.rs
+│   ├── nexmark.rs
+│   ├── shuffle.rs
+│   ├── tools
+│   │   ├── plot_benchmark.py          # Unified plotting tool
+│   │   ├── plot_monte_carlo.py        # Monte Carlo specific plotter
+│   │   └── plot_monte_carlo_paths.py  # Monte Carlo result plotting
+│   └── wordcount.rs
+├── examples
+│   ├── kernels                        # Reusable GPU kernels
+│   │   ├── black_scholes.rs           # Black-Scholes kernel implementation
+│   │   ├── mod.rs                     # Kernel module exports
+│   │   ├── monte_carlo.rs             # Monte Carlo kernel implementation
+│   │   └── tests                      # Kernel unit tests
+│   │       ├── black_scholes_tests.rs
+│   │       ├── mod.rs
+│   │       └── monte_carlo_tests.rs
+│   ├── monte_carlo_comparison.rs      # Monte Carlo GPU vs CPU comparison example
+│   └── ...                            # Other examples (wordcount, pagerank, etc.)
+├── src
+│   ├── operator
+│   │   ├── gpu                        # GPU operator implementation
+│   │   │   ├── batch_strategy.rs      # Batching strategies
+│   │   │   ├── context.rs             # GpuContext wrapper
+│   │   │   ├── kernel.rs              # GpuKernel trait definition
+│   │   │   ├── map_gpu.rs             # MapGpu operator
+│   │   │   └── mod.rs                 # Module exports
+│   │   └── ...                        # Other operators
+│   └── ...                            # Core library files
+└── tests
+    ├── gpu_kernels.rs                 # GPU kernel integration tests
+    └── ...                            # Other integration tests
 ```
 
 ### Key Components
@@ -2903,29 +2914,29 @@ The benchmark provides **two separate performance measurements** for each execut
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    TIMING MEASUREMENT BREAKDOWN                                  │
+│                    TIMING MEASUREMENT BREAKDOWN                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   COMPUTE ONLY TIMING:                                                           │
-│   ┌─────────────────────────────────────────────────────────┐                    │
-│   │ [Stream Processing] ──► [Computation] ──► (Discard)     │                    │
-│   │                                                          │                    │
-│   │ Measures: Pure compute performance without I/O overhead  │                    │
-│   │ Use case: Compare raw algorithmic efficiency            │                    │
-│   └─────────────────────────────────────────────────────────┘                    │
-│                                                                                  │
-│   OVERALL (TOTAL) TIMING:                                                        │
-│   ┌─────────────────────────────────────────────────────────┐                    │
-│   │ [Stream Processing] ──► [Computation] ──► [Collect Vec] │                    │
-│   │                                                          │                    │
-│   │ Measures: End-to-end performance including result fetch  │                    │
-│   │ Use case: Realistic application performance              │                    │
-│   └─────────────────────────────────────────────────────────┘                    │
-│                                                                                  │
-│   For GPU workloads, the difference can be significant:                          │
+│                                                                                 │
+│   COMPUTE ONLY TIMING:                                                          │
+│   ┌─────────────────────────────────────────────────────────┐                   │
+│   │ [Stream Processing] ──► [Computation] ──► (Discard)     │                   │
+│   │                                                         │                   │
+│   │ Measures: Pure compute performance without I/O overhead │                   │
+│   │ Use case: Compare raw algorithmic efficiency            │                   │
+│   └─────────────────────────────────────────────────────────┘                   │
+│                                                                                 │
+│   OVERALL (TOTAL) TIMING:                                                       │
+│   ┌─────────────────────────────────────────────────────────┐                   │
+│   │ [Stream Processing] ──► [Computation] ──► [Collect Vec] │                   │
+│   │                                                         │                   │
+│   │ Measures: End-to-end performance including result fetch │                   │
+│   │ Use case: Realistic application performance             │                   │
+│   └─────────────────────────────────────────────────────────┘                   │
+│                                                                                 │
+│   For GPU workloads, the difference can be significant:                         │
 │   - Compute Only: Excludes GPU→CPU data transfer overhead                       │
 │   - Overall: Includes buffer allocation, synchronization, and result transfer   │
-│                                                                                  │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -3068,7 +3079,7 @@ Price
 130│    │                 ITM REGION (Call)                   │
   │     │         (Stock > Strike = Option has value)         │
   │     │                                                     │
-  │     │   Payoff = Stock Price - Strike = $130 - $105 = $25│
+  │     │   Payoff = Stock Price - Strike = $130 - $105 = $25 │
   │     └─────────────────────────────────────────────────────┘
 105│ ═══════════════════ STRIKE K = $105 ═════════════════════
   │     ┌─────────────────────────────────────────────────────┐
@@ -3076,7 +3087,7 @@ Price
  80│    │                 OTM REGION (Call)                   │
   │     │         (Stock < Strike = Option worthless)         │
   │     │                                                     │
-  │     │   Payoff = max($80 - $105, 0) = max(-$25, 0) = $0  │
+  │     │   Payoff = max($80 - $105, 0) = max(-$25, 0) = $0   │
   │     └─────────────────────────────────────────────────────┘
   │
 ```
@@ -3126,14 +3137,14 @@ The idea is simple: simulate many possible futures, calculate what the option wo
                           1000 simulated futures
                                     │
                                     ▼
-           ┌──────────────────────────────────────────────┐
+           ┌─────────────────────────────────────────────┐
            │  Future 1: Stock ends at $120 → payoff $15  │
            │  Future 2: Stock ends at $85  → payoff $0   │
            │  Future 3: Stock ends at $142 → payoff $37  │
            │  Future 4: Stock ends at $91  → payoff $0   │
            │           ...                               │
            │  Future 1000: Stock ends at $108 → payoff $3│
-           └──────────────────────────────────────────────┘
+           └─────────────────────────────────────────────┘
                                     │
                                     ▼
                       Average payoff = $8.80
@@ -3201,25 +3212,25 @@ This scales the random component Z ~ N(0,1) to match the stock's volatility.
 Putting it together for one time step:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     GBM Price Update                                     │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
+┌────────────────────────────────────────────────────────────────────────┐
+│                     GBM Price Update                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
 │   S_new = S_old × exp(drift + diffusion × Z)                           │
-│                                                                         │
-│   Where:                                                                │
+│                                                                        │
+│   Where:                                                               │
 │     drift     = (r - σ²/2) × Δt          = 0.0006                      │
 │     diffusion = σ × √Δt                  = 0.0283                      │
 │     Z         = random normal ~ N(0,1)   = -0.65 (example)             │
-│                                                                         │
-│   Example calculation:                                                  │
-│     S_old = 100.00                                                      │
+│                                                                        │
+│   Example calculation:                                                 │
+│     S_old = 100.00                                                     │
 │     exponent = 0.0006 + 0.0283 × (-0.65) = 0.0006 - 0.0184 = -0.0178   │
 │     S_new = 100.00 × exp(-0.0178) = 100.00 × 0.9823 = 98.23            │
-│                                                                         │
+│                                                                        │
 │   Interpretation: Stock dropped 1.77% this step due to negative Z      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 The algorithm simulates stock price paths using Geometric Brownian Motion (GBM):
@@ -3282,7 +3293,7 @@ The Monte Carlo GPU kernel uses the same SoA (Structure of Arrays) layout as Bla
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                 Monte Carlo GPU Architecture                 │
+│                 Monte Carlo GPU Architecture                │
 ├─────────────────────────────────────────────────────────────┤
 │  CPU Side                    │  GPU Side                    │
 │  ──────────                  │  ────────                    │
@@ -3772,19 +3783,19 @@ Monte Carlo option pricing is **embarrassingly parallel** at the option level. E
 ### Parallelization Model: One Thread Per Option
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         GPU PARALLELIZATION                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Option 0 ──► Thread 0 ──► [1000 paths × 50 steps] ──► Price₀          │
-│  Option 1 ──► Thread 1 ──► [1000 paths × 50 steps] ──► Price₁          │
-│  Option 2 ──► Thread 2 ──► [1000 paths × 50 steps] ──► Price₂          │
-│     ...          ...              ...                    ...            │
-│  Option N ──► Thread N ──► [1000 paths × 50 steps] ──► PriceN          │
-│                                                                         │
-│  ◄─────────────────── ALL IN PARALLEL ────────────────────►            │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                         GPU PARALLELIZATION                    │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  Option 0 ──► Thread 0 ──► [1000 paths × 50 steps] ──► Price₀  │
+│  Option 1 ──► Thread 1 ──► [1000 paths × 50 steps] ──► Price₁  │
+│  Option 2 ──► Thread 2 ──► [1000 paths × 50 steps] ──► Price₂  │
+│     ...          ...              ...                    ...   │
+│  Option N ──► Thread N ──► [1000 paths × 50 steps] ──► PriceN  │
+│                                                                │
+│  ◄─────────────────── ALL IN PARALLEL ────────────────────►    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 Each GPU thread:
@@ -3833,7 +3844,7 @@ fn monte_carlo_kernel<F: Float>(
 
 ```text
                     GPU with 1000s of cores
-         ┌───────────────────────────────────────┐
+         ┌──────────────────────────────────────┐
          │  ┌────┐┌────┐┌────┐┌────┐    ┌────┐  │
          │  │ SM ││ SM ││ SM ││ SM │ ...│ SM │  │  SM = Streaming Multiprocessor
          │  └────┘└────┘└────┘└────┘    └────┘  │
@@ -3843,18 +3854,18 @@ fn monte_carlo_kernel<F: Float>(
          │  │Warp││Warp││Warp││Warp│    │Warp│  │  Warp = 32 threads (NVIDIA)
          │  │ 0  ││ 1  ││ 2  ││ 3  │ ...│ N  │  │         64 threads (AMD)
          │  └────┘└────┘└────┘└────┘    └────┘  │
-         └───────────────────────────────────────┘
+         └──────────────────────────────────────┘
                          │
                          ▼
-    ┌────────────────────────────────────────────────────┐
-    │ 1 Million Options → distributed across all threads │
-    │                                                    │
+    ┌───────────────────────────────────────────────────┐
+    │ 1 Million Options → distributed across all threads│
+    │                                                   │
     │   Warp 0 (32 threads): Options 0-31               │
     │   Warp 1 (32 threads): Options 32-63              │
     │   Warp 2 (32 threads): Options 64-95              │
-    │   ...                                              │
+    │   ...                                             │
     │   Warp 31249: Options 999,968 - 999,999           │
-    └────────────────────────────────────────────────────┘
+    └───────────────────────────────────────────────────┘
 ```
 
 ### Data Layout: Structure of Arrays (SoA)
@@ -3871,14 +3882,14 @@ Array of Structs (AoS) - ❌ Bad for GPU:
   Problem: Adjacent threads access non-contiguous memory
 
 Structure of Arrays (SoA) - ✅ Good for GPU:
-┌──────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────┐
 │ stocks:  [100.0, 105.0, 98.0, 112.0, ...]           │
 │ strikes: [102.0, 108.0, 95.0, 115.0, ...]           │
 │ times:   [1.0,   0.5,   2.0,  1.5,   ...]           │
 │ rates:   [0.05,  0.05,  0.05, 0.05,  ...]           │
 │ vols:    [0.2,   0.25,  0.18, 0.3,   ...]           │
 │ seeds:   [0xA7.., 0xB3.., 0xC1.., ...]              │
-└──────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────┘
   Benefit: Coalesced memory access, full bandwidth utilization
 ```
 
@@ -4074,18 +4085,18 @@ for path in 0..1000:
     S = 100.0  (initial price)
     
     for step in 0..50:
-        ┌─────────────────────────────────────┐
-        │ z = box_muller(&mut seed)           │
-        │   ├── u1 = xorshift(seed) → 0.3874 │
-        │   ├── u2 = xorshift(seed) → 0.3286 │
-        │   └── z = √(-2 ln 0.3874) × cos(2π×0.3286)
-        │       = √(1.8964) × cos(2.0648)    │
-        │       = -0.6529                     │
-        │                                     │
-        │ S *= exp(0.0006 + 0.0283 × -0.6529)│
-        │ S *= 0.9823                         │
-        │ S = 98.23                           │
-        └─────────────────────────────────────┘
+        ┌────────────────────────────────────────────┐
+        │ z = box_muller(&mut seed)                  │
+        │   ├── u1 = xorshift(seed) → 0.3874         │
+        │   ├── u2 = xorshift(seed) → 0.3286         │
+        │   └── z = √(-2 ln 0.3874) × cos(2π×0.3286) │
+        │       = √(1.8964) × cos(2.0648)            │
+        │       = -0.6529                            │
+        │                                            │
+        │ S *= exp(0.0006 + 0.0283 × -0.6529)        │
+        │ S *= 0.9823                                │
+        │ S = 98.23                                  │
+        └────────────────────────────────────────────┘
     
     First path after 50 steps: S_final = 69.63
     payoff = max(69.63 - 105.0, 0) = 0.0 (OTM)
@@ -4122,13 +4133,13 @@ put_out:  [5.21, 9.84, ...]   →   [Output₀, Output₁, ...]
 ### Performance Summary
 
 ```text
-┌────────────────────────────────────────────────────────────────────┐
-│                 MONTE CARLO GPU PERFORMANCE                         │
-├────────────────────────────────────────────────────────────────────┤
-│                                                                    │
-│  Input: 1 Million Options                                          │
+┌───────────────────────────────────────────────────────────────────┐
+│                 MONTE CARLO GPU PERFORMANCE                       │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Input: 1 Million Options                                         │
 │  Work:  1M × 1000 paths × 50 steps × 2 RNG = 100 Billion ops      │
-│                                                                    │
+│                                                                   │
 │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐          │
 │  │   CPU Seq     │  │   CPU Par     │  │     GPU       │          │
 │  │   1 thread    │  │   8 threads   │  │  1000s cores  │          │
@@ -4137,10 +4148,10 @@ put_out:  [5.21, 9.84, ...]   →   [Output₀, Output₁, ...]
 │  │               │  │               │  │               │          │
 │  │   1x          │  │   7.5x        │  │   600x        │          │
 │  └───────────────┘  └───────────────┘  └───────────────┘          │
-│                                                                    │
-│  GPU Throughput: ~600 GFLOPS                                       │
-│                                                                    │
-└────────────────────────────────────────────────────────────────────┘
+│                                                                   │
+│  GPU Throughput: ~600 GFLOPS                                      │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -4167,15 +4178,15 @@ The benchmark uses a **two-tier seeding approach** to balance reproducibility wi
 │                      MONTE CARLO SEEDING STRATEGY                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Tier 1: INPUT GENERATION SEED (BENCHMARK_SEED = 42)                       │
+│  Tier 1: INPUT GENERATION SEED (BENCHMARK_SEED = 42)                        │
 │  ─────────────────────────────────────────────────                          │
-│  Purpose: Generate reproducible test inputs (stock prices, strikes, etc.)  │
+│  Purpose: Generate reproducible test inputs (stock prices, strikes, etc.)   │
 │  Scope:   Benchmark-wide                                                    │
 │  Effect:  Same seed → same test options every run → fair comparisons        │
 │                                                                             │
 │                              ↓                                              │
 │                                                                             │
-│  Tier 2: PER-OPTION SIMULATION SEED (deterministic_seed(&input))           │
+│  Tier 2: PER-OPTION SIMULATION SEED (deterministic_seed(&input))            │
 │  ──────────────────────────────────────────────────────────────             │
 │  Purpose: Seed Monte Carlo RNG for each option's simulation                 │
 │  Scope:   Per-option (derived from input parameters)                        │
