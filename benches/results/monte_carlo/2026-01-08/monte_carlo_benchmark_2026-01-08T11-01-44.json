@@ -1,0 +1,46 @@
+{
+  "benchmark_type": "monte_carlo",
+  "start_time": "2026-01-08T11:01:44.757098+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 12,
+    "ram_gb": 32.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M2 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 1,
+    "gpu_batch_size": 100000
+  },
+  "total_tests": 6,
+  "cpu_workers": 12,
+  "batch_size": 100000,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-01-08T11:01:49.227951+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "renoir_seq_total_time_s": 3.9853037909999998,
+      "renoir_par_total_time_s": 0.423977916,
+      "gpu_total_time_s": 0.059241834,
+      "speedup": 67.2717828249544,
+      "speedup_parallel": 7.156731778425361,
+      "renoir_seq_gflops": 2.5092190017190084,
+      "renoir_par_gflops": 23.586134141949035,
+      "gpu_gflops": 168.79963574389004,
+      "cpu_workers": 12,
+      "batch_size": 100000,
+      "validation_passed": true,
+      "validation_max_error": 0.00005340576171875,
+      "validation_avg_error": 9.463065012823791e-6,
+      "validation_sample_size": 1000
+    }
+  ],
+  "monte_carlo_config": {
+    "num_paths": 1000,
+    "time_steps": 50,
+    "flops_per_option": 1000000.0
+  }
+}

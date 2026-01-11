@@ -1,0 +1,66 @@
+{
+  "benchmark_type": "monte_carlo",
+  "start_time": "2026-01-08T17:44:10.244154+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 12,
+    "ram_gb": 32.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M2 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 1,
+    "gpu_batch_size": 100000
+  },
+  "total_tests": 6,
+  "cpu_workers": 12,
+  "batch_size": 100000,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-01-08T17:44:14.682709+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "renoir_seq_total_time_s": 3.94389325,
+      "renoir_par_total_time_s": 0.426254333,
+      "gpu_total_time_s": 0.063683041,
+      "speedup": 61.93003958463604,
+      "speedup_parallel": 6.693372777220234,
+      "renoir_seq_gflops": 2.5355655861121495,
+      "renoir_par_gflops": 23.460172075247858,
+      "gpu_gflops": 157.0276771173663,
+      "cpu_workers": 12,
+      "batch_size": 100000,
+      "validation_passed": true,
+      "validation_max_error": 0.00005340576171875,
+      "validation_avg_error": 9.463065012823791e-6,
+      "validation_sample_size": 1000
+    },
+    {
+      "test_id": 2,
+      "timestamp": "2026-01-08T17:44:26.107596+00:00",
+      "items_count": 25000,
+      "data_size_gb": 0.00046566128730773926,
+      "renoir_seq_total_time_s": 10.052902417,
+      "renoir_par_total_time_s": 1.087196666,
+      "gpu_total_time_s": 0.033366,
+      "speedup": 301.2918065395912,
+      "speedup_parallel": 32.583967691662174,
+      "renoir_seq_gflops": 2.4868439942004863,
+      "renoir_par_gflops": 22.994919669851157,
+      "gpu_gflops": 749.2657195947971,
+      "cpu_workers": 12,
+      "batch_size": 100000,
+      "validation_passed": true,
+      "validation_max_error": 0.00005340576171875,
+      "validation_avg_error": 9.463065012823791e-6,
+      "validation_sample_size": 1000
+    }
+  ],
+  "monte_carlo_config": {
+    "num_paths": 1000,
+    "time_steps": 50,
+    "flops_per_option": 1000000.0
+  }
+}
