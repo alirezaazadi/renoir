@@ -120,12 +120,14 @@ mod batch_strategy;
 mod context;
 mod kernel;
 mod map_gpu;
+pub(crate) mod reduce_gpu;
 
 // Public exports for users
 pub use batch_strategy::GpuBatchStrategy;
 pub use context::GpuContext;
 pub use kernel::GpuKernel;
 pub use map_gpu::MapGpu;
+pub use reduce_gpu::{ReduceGpuBackend, ReduceGpuConfig, ReduceKernel};
 
 // Re-export CubeCL types that users need for implementing kernels.
 // This allows users to import everything from renoir::operator::gpu

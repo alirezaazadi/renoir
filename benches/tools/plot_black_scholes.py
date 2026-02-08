@@ -7,10 +7,10 @@ It compares four strategies: CPU Sequential, CPU Parallel, GPU Sequential, GPU P
 
 Usage:
     # Plot by benchmark type (uses most recent file)
-    python benches/tools/plot_benchmark.py black_scholes
+    python benches/tools/plot_black_scholes.py black_scholes
 
     # Plot a specific results file
-    python benches/tools/plot_benchmark.py benches/results/black_scholes/2024-12-04/black_scholes_benchmark_*.json
+    python benches/tools/plot_black_scholes.py benches/results/black_scholes/2024-12-04/black_scholes_benchmark_*.json
 
 Output:
     Charts are saved alongside the JSON file as plot_black_scholes_benchmark_{timestamp}.png
@@ -126,53 +126,72 @@ def find_most_recent_file(benchmark_type: str) -> Path:
 def build_config_description(results, metadata):
     """
     Build a system configuration description string for the chart.
+
+    Shows system specs, parallelisation factors, and benchmark load
+    parameters as a single-line metadata footer.
+
+    Unified format across all GPU benchmark plotters:
+      Platform | CPU | GPU | Workers | GPU Threads | Batch | [specific] | Sizes | Tests
     """
     platform = metadata.get("platform", "Unknown")
-    benchmark_type = metadata.get("benchmark_type", "unknown")
     is_streaming = metadata.get("is_streaming", False)
     system_config = metadata.get("system_config", {})
-    
+
     items_counts = [r["items_count"] for r in results]
     min_items = min(items_counts) if items_counts else 0
     max_items = max(items_counts) if items_counts else 0
-    
-    cpu_workers = results[0].get("cpu_workers", 4) if results else 4
-    
-    # Extract system config values
+
+    cpu_workers = metadata.get("cpu_workers", results[0].get("cpu_workers", 4) if results else 4)
+
+    # System specs
     cpu_cores = system_config.get("cpu_cores", cpu_workers)
     ram_gb = system_config.get("ram_gb", 0)
     gpu_device = system_config.get("gpu_device", None)
+    gpu_backend = system_config.get("gpu_backend", "")
     vectorization = system_config.get("vectorization_factor", 16)
-    gpu_batch = system_config.get("gpu_batch_size", 10_000_000)
-    
+    gpu_batch = metadata.get("batch_size", system_config.get("gpu_batch_size", 10_000_000))
+
+    # GPU threads: try system_config first, then per-result field, then default estimate
+    gpu_threads = system_config.get("gpu_threads", None)
+    if gpu_threads is None and results:
+        gpu_threads = results[0].get("gpu_threads", None)
+    if gpu_threads is None:
+        gpu_threads = 256 * 64  # default CubeCL estimate
+
     lines = [
-        f"Type: {BENCHMARK_TYPE_DISPLAY.get(benchmark_type, benchmark_type.title())}",
+        f"Platform: {platform}",
     ]
-    
-    # Add system details if available
+
+    # CPU + RAM
     if ram_gb > 0:
-        lines.append(f"CPU: {cpu_cores} cores, RAM: {ram_gb:.0f}GB")
+        lines.append(f"CPU: {cpu_cores} cores, RAM: {ram_gb:.0f} GB")
     else:
         lines.append(f"CPU: {cpu_cores} cores")
-    
-    # Add GPU device info
+
+    # GPU device
     if gpu_device:
         lines.append(f"GPU: {gpu_device}")
+    elif gpu_backend:
+        lines.append(f"GPU Backend: {gpu_backend}")
     else:
         lines.append(f"GPU: {platform}")
-    
+
+    # Parallelisation factors
+    lines.append(f"Workers: {cpu_workers}")
+    lines.append(f"GPU Threads: {format_number(gpu_threads)}")
+
     if is_streaming:
         streaming_config = metadata.get("streaming_config", {})
-        lines.append("Mode: STREAMING SIMULATION (Lazy Iterator)")
-        lines.append(f"Total Items: {format_number(streaming_config.get('total_items', max_items))}")
-        lines.append(f"Adaptive Batch: {format_number(streaming_config.get('adaptive_min_batch', 100000))} - {format_number(streaming_config.get('adaptive_max_batch', 500000000))}")
+        lines.append("Mode: Streaming")
+        lines.append(f"Adaptive Batch: {format_number(streaming_config.get('adaptive_min_batch', 100000))}\u2013{format_number(streaming_config.get('adaptive_max_batch', 500000000))}")
     else:
-        lines.append(f"Problem Sizes: {format_number(min_items)} - {format_number(max_items)}")
-    
-    lines.append(f"Vec: {vectorization}")
-    lines.append(f"Batch: {format_number(gpu_batch)}")
+        lines.append(f"Vec: {vectorization}")
+        lines.append(f"Batch: {format_number(gpu_batch)}")
+
+    # Benchmark load
+    lines.append(f"Sizes: {format_number(min_items)}\u2013{format_number(max_items)}")
     lines.append(f"Tests: {len(results)}")
-    
+
     return "  |  ".join(lines)
 
 
@@ -1347,11 +1366,11 @@ def print_unified_summary(results, metadata, speedups_seq, speedups_par, sizes, 
 def main():
     """Main entry point for the unified plotting script."""
     if len(sys.argv) < 2:
-        print("Usage: python benches/tools/plot_benchmark.py <benchmark_type|json_file>")
+        print("Usage: python benches/tools/plot_black_scholes.py <benchmark_type|json_file>")
         print("\nBenchmark types: black_scholes")
         print("\nExamples:")
-        print("  python benches/tools/plot_benchmark.py black_scholes")
-        print("  python benches/tools/plot_benchmark.py path/to/benchmark.json")
+        print("  python benches/tools/plot_black_scholes.py black_scholes")
+        print("  python benches/tools/plot_black_scholes.py path/to/benchmark.json")
         sys.exit(1)
 
     arg = sys.argv[1]

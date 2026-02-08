@@ -28,7 +28,7 @@
 //! ## Output
 //!
 //! Results are saved to `benches/results/black_scholes/{date}/` as JSON files
-//! and automatically plotted using `benches/tools/plot_benchmark.py`.
+//! and automatically plotted using `benches/tools/plot_black_scholes.py`.
 
 use std::time::Instant;
 

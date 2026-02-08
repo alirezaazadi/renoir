@@ -1253,6 +1253,7 @@ dependencies = [
  "cubecl-cuda",
  "cubecl-hip",
  "cubecl-matmul",
+ "cubecl-reduce",
  "cubecl-runtime",
  "cubecl-std",
  "cubecl-wgpu",

@@ -25,8 +25,8 @@ rdkafka = ["dep:rdkafka", "tokio"]
 # parquet = ["dep:parquet", "dep:arrow"]
 
 # GPU acceleration features
-gpu-wgpu = ["dep:cubecl", "cubecl/wgpu", "dep:pollster", "dep:bytemuck", "dep:libm", "dep:chrono"]
-gpu-cuda = ["dep:cubecl", "cubecl/cuda", "dep:pollster", "dep:bytemuck", "dep:libm", "dep:chrono"]
+gpu-wgpu = ["dep:cubecl", "cubecl/wgpu", "cubecl/reduce", "dep:pollster", "dep:bytemuck", "dep:libm", "dep:chrono"]
+gpu-cuda = ["dep:cubecl", "cubecl/cuda", "cubecl/reduce", "dep:pollster", "dep:bytemuck", "dep:libm", "dep:chrono"]
 
 [dependencies]
 # for logging to the console
@@ -195,6 +195,12 @@ harness = false
 [[bench]]
 name = "gpu_monte_carlo"
 path = "benches/gpu/monte_carlo.rs"
+harness = false
+# Works with: --features gpu-wgpu OR --features gpu-cuda
+
+[[bench]]
+name = "gpu_reduce"
+path = "benches/gpu/reduce.rs"
 harness = false
 # Works with: --features gpu-wgpu OR --features gpu-cuda
 

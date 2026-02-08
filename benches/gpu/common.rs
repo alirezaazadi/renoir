@@ -187,6 +187,8 @@ pub enum BenchmarkType {
     BlackScholes,
     /// Monte Carlo option pricing benchmark
     MonteCarlo,
+    /// GPU Reduce benchmark (Sum, Product, Min, Max)
+    Reduce,
 }
 
 impl BenchmarkType {
@@ -195,6 +197,7 @@ impl BenchmarkType {
         match self {
             BenchmarkType::BlackScholes => "black_scholes",
             BenchmarkType::MonteCarlo => "monte_carlo",
+            BenchmarkType::Reduce => "reduce",
         }
     }
 
@@ -203,6 +206,7 @@ impl BenchmarkType {
         match self {
             BenchmarkType::BlackScholes => "black_scholes_benchmark",
             BenchmarkType::MonteCarlo => "monte_carlo_benchmark",
+            BenchmarkType::Reduce => "reduce_benchmark",
         }
     }
 
@@ -211,6 +215,7 @@ impl BenchmarkType {
         match self {
             BenchmarkType::BlackScholes => "Black-Scholes CPU vs GPU",
             BenchmarkType::MonteCarlo => "Monte Carlo CPU vs GPU",
+            BenchmarkType::Reduce => "Reduce CPU vs GPU",
         }
     }
 }
@@ -312,6 +317,9 @@ pub struct SystemConfig {
     pub vectorization_factor: usize,
     /// GPU batch size
     pub gpu_batch_size: usize,
+    /// Estimated GPU thread count (workgroups × threads-per-workgroup)
+    #[serde(default)]
+    pub gpu_threads: Option<usize>,
 }
 
 impl SystemConfig {
@@ -345,6 +353,10 @@ impl SystemConfig {
         // VRAM detection not available in CubeCL yet
         let gpu_vram_gb = None;
         
+        // GPU thread estimate: workgroups × threads-per-workgroup
+        // Common CubeCL default: 256 workgroups × 64 threads = 16384
+        let gpu_threads = Some(256 * 64);
+        
         Self {
             os,
             arch,
@@ -355,6 +367,7 @@ impl SystemConfig {
             gpu_vram_gb,
             vectorization_factor,
             gpu_batch_size,
+            gpu_threads,
         }
     }
 }
@@ -429,8 +442,9 @@ pub fn run_plotter(
 ) {
     // Select the appropriate plotter script based on benchmark type
     let script_path = match benchmark_type {
-        BenchmarkType::BlackScholes => "benches/tools/plot_benchmark.py",
+        BenchmarkType::BlackScholes => "benches/tools/plot_black_scholes.py",
         BenchmarkType::MonteCarlo => "benches/tools/plot_monte_carlo.py",
+        BenchmarkType::Reduce => "benches/tools/plot_reduce_benchmark.py",
     };
     let plot_path = get_plot_filepath(benchmark_type, timestamp);
 

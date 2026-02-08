@@ -78,31 +78,69 @@ def find_most_recent_file(benchmark_type: str) -> Path:
 
 
 def build_config_description(results, metadata):
-    """Build a system configuration description string."""
+    """
+    Build a system configuration description string.
+
+    Shows system specs, parallelisation factors, Monte Carlo parameters,
+    and benchmark load parameters as a single-line metadata footer.
+
+    Unified format across all GPU benchmark plotters:
+      Platform | CPU | GPU | Workers | GPU Threads | Batch | [specific] | Sizes | Tests
+    """
     platform = metadata.get("platform", "Unknown")
     mc_config = metadata.get("monte_carlo_config", {})
     system_config = metadata.get("system_config", {})
-    
+
     items_counts = [r["items_count"] for r in results]
     min_items = min(items_counts) if items_counts else 0
     max_items = max(items_counts) if items_counts else 0
-    
-    cpu_workers = results[0].get("cpu_workers", 4) if results else 4
+
+    cpu_workers = metadata.get("cpu_workers", results[0].get("cpu_workers", 4) if results else 4)
     cpu_cores = system_config.get("cpu_cores", cpu_workers)
-    gpu_device = system_config.get("gpu_device", "Unknown")
-    
+    ram_gb = system_config.get("ram_gb", 0)
+    gpu_device = system_config.get("gpu_device", None)
+    gpu_backend = system_config.get("gpu_backend", "")
+    gpu_batch = metadata.get("batch_size", system_config.get("gpu_batch_size", "?"))
+
+    # GPU threads: try system_config first, then per-result field, then default estimate
+    gpu_threads = system_config.get("gpu_threads", None)
+    if gpu_threads is None and results:
+        gpu_threads = results[0].get("gpu_threads", None)
+    if gpu_threads is None:
+        gpu_threads = 256 * 64  # default CubeCL estimate
+
     num_paths = mc_config.get("num_paths", "?")
     time_steps = mc_config.get("time_steps", "?")
-    
-    lines = [
-        f"Monte Carlo: {num_paths} paths × {time_steps} steps",
-        f"CPU: {cpu_cores} cores",
-        f"GPU: {gpu_device or platform}",
-        f"Sizes: {format_number(min_items)} - {format_number(max_items)}",
-        f"Tests: {len(results)}",
-    ]
-    
-    return "  |  ".join(lines)
+
+    parts = [f"Platform: {platform}"]
+
+    # CPU + RAM
+    if ram_gb > 0:
+        parts.append(f"CPU: {cpu_cores} cores, RAM: {ram_gb:.0f} GB")
+    else:
+        parts.append(f"CPU: {cpu_cores} cores")
+
+    # GPU device
+    if gpu_device:
+        parts.append(f"GPU: {gpu_device}")
+    elif gpu_backend:
+        parts.append(f"GPU Backend: {gpu_backend}")
+    else:
+        parts.append(f"GPU: {platform}")
+
+    # Parallelisation
+    parts.append(f"Workers: {cpu_workers}")
+    parts.append(f"GPU Threads: {format_number(gpu_threads)}")
+    parts.append(f"Batch: {format_number(gpu_batch)}")
+
+    # Monte Carlo specific
+    parts.append(f"MC: {num_paths} paths \u00d7 {time_steps} steps")
+
+    # Benchmark load
+    parts.append(f"Sizes: {format_number(min_items)}\u2013{format_number(max_items)}")
+    parts.append(f"Tests: {len(results)}")
+
+    return "  |  ".join(parts)
 
 
 def plot_monte_carlo_results(results, metadata, source_name: str, output_dir: Path):

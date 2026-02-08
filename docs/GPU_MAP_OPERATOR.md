@@ -1,4 +1,4 @@
-# GPU-Accelerated Map Operator for Renoir
+# GPU-Accelerated Operators for Renoir
 
 ## Table of Contents
 
@@ -12,26 +12,29 @@
 4. [The Monte Carlo Model](#the-monte-carlo-model)
 5. [The CubeCL Framework](#the-cubecl-framework)
 6. [The map_gpu Operator](#the-map_gpu-operator)
-7. [Implementing GPU Kernels](#implementing-gpu-kernels)
-8. [GPU Programming Concepts](#gpu-programming-concepts)
-9. [GPU Parallelization Strategy](#gpu-parallelization-strategy)
-10. [Step-by-Step GPU Computation Example](#step-by-step-gpu-computation-example)
-11. [Performance Bottlenecks and Optimizations](#performance-bottlenecks-and-optimizations)
-12. [Why Speedup Drops After 250M Options](#why-speedup-drops-after-250m-options-large-problem-sizes)
-13. [Batching Strategies](#batching-strategies)
-14. [GPU Context and Backend Selection](#gpu-context-and-backend-selection)
-15. [Quick Start Guide](#quick-start-guide)
-16. [Project Structure](#project-structure)
-17. [Running the Examples](#running-the-examples)
-18. [Running Benchmarks](#running-benchmarks)
-19. [Generating Charts](#generating-charts)
-20. [Performance Considerations](#performance-considerations)
-21. [API Reference](#api-reference)
-22. [Benchmark Results](#benchmark-results-and-analysis)
-23. [Monte Carlo Benchmark](#monte-carlo-benchmark)
-24. [Black-Scholes Kernel Improvements](#black-scholes-kernel-improvements)
-25. [GPU Kernel Integration Tests](#gpu-kernel-integration-tests)
-26. [References](#references)
+7. [The reduce_gpu Operator](#the-reduce_gpu-operator)
+8. [Implementing GPU Kernels](#implementing-gpu-kernels)
+9. [GPU Programming Concepts](#gpu-programming-concepts)
+10. [GPU Parallelization Strategy](#gpu-parallelization-strategy)
+11. [Step-by-Step GPU Computation Example](#step-by-step-gpu-computation-example)
+12. [Performance Bottlenecks and Optimizations](#performance-bottlenecks-and-optimizations)
+13. [Why Speedup Drops After 250M Options](#why-speedup-drops-after-250m-options-large-problem-sizes)
+14. [Batching Strategies](#batching-strategies)
+15. [GPU Context and Backend Selection](#gpu-context-and-backend-selection)
+16. [Quick Start Guide](#quick-start-guide)
+17. [Project Structure](#project-structure)
+18. [Running the Examples](#running-the-examples)
+19. [Running Benchmarks](#running-benchmarks)
+20. [Generating Charts](#generating-charts)
+21. [Performance Considerations](#performance-considerations)
+22. [API Reference](#api-reference)
+23. [Benchmark Results](#benchmark-results-and-analysis)
+24. [Monte Carlo Benchmark](#monte-carlo-benchmark)
+25. [Reduce Benchmark](#reduce-benchmark)
+26. [Evaluation](#evaluation)
+27. [Black-Scholes Kernel Improvements](#black-scholes-kernel-improvements)
+28. [GPU Kernel Integration Tests](#gpu-kernel-integration-tests)
+29. [References](#references)
 
 
 
@@ -40,12 +43,17 @@
 
 ## Introduction
 
-The `map_gpu` operator extends Renoir's streaming data processing capabilities with GPU acceleration. It enables high-throughput parallel processing of stream elements using GPU kernels written with the [CubeCL](https://github.com/tracel-ai/cubecl) library.
+Renoir's GPU acceleration module provides two streaming operators that offload computation to the GPU using the [CubeCL](https://github.com/tracel-ai/cubecl) library:
 
-### When to Use `map_gpu` vs `map`
+- **`map_gpu`** -- element-wise transformations (e.g., Black-Scholes pricing, Monte Carlo simulation)
+- **`reduce_gpu`** -- parallel reductions (Sum, Product, Min, Max)
 
-| Use `map_gpu` when: | Use standard `map` when: |
-|---------------------|--------------------------|
+Both operators integrate seamlessly into Renoir's dataflow pipeline and support WGPU (cross-platform) and CUDA (NVIDIA) backends.
+
+### When to Use GPU Operators
+
+| Use `map_gpu` / `reduce_gpu` when: | Use standard `map` / `reduce` when: |
+|-------------------------------------|--------------------------------------|
 | Processing 75,000+ items | Processing < 10,000 items |
 | Compute-intensive transformations | Simple transformations |
 | Highly parallel workloads | Complex branching logic |
@@ -834,6 +842,128 @@ The `MapGpu` operator implements **async pipelining** for optimal GPU utilizatio
 | `FlushBatch` | Force immediate GPU flush |
 | `FlushAndRestart` | Flush + drain, then signal iteration boundary |
 | `Terminate` | Flush + drain remaining items, then terminate |
+
+---
+
+## The reduce_gpu Operator
+
+The `reduce_gpu` operator performs GPU-accelerated parallel reductions on streaming data. It supports four built-in reduction kernels (Sum, Product, Min, Max) and uses CubeCL's multi-pass reduction algorithm for high-throughput aggregation.
+
+### Architecture Overview
+
+Unlike `map_gpu` which transforms each element independently, `reduce_gpu` accumulates stream elements into a single scalar result using a GPU-accelerated reduction tree:
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                          ReduceGpu Operator (Batched Multi-Pass)                      │
+│                                                                                      │
+│  ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────────┐    │
+│  │    Upstream     │      │   Value Buffer      │      │   Accumulator           │    │
+│  │    Operator     │─────▶│   (batch_size items, │      │   (running partial      │    │
+│  │    .next()      │      │    f32 or f64)       │      │    result)              │    │
+│  └─────────────────┘      └──────────┬──────────┘      └────────────┬────────────┘    │
+│                                      │                              ▲                │
+│                                      │ flush_batch()                │                │
+│                                      ▼                              │                │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐   │
+│  │                       GPU MULTI-PASS REDUCTION                               │   │
+│  │                                                                               │   │
+│  │   Pass 1: Tile Reduction          Pass 2: Final Reduction                     │   │
+│  │   ┌─────────────────────┐         ┌─────────────────────┐                     │   │
+│  │   │ [chunk₁][chunk₂]..  │         │ [partial₁, partial₂ │                     │   │
+│  │   │  ↓        ↓         │────────▶│   ... partialₙ]     │                     │   │
+│  │   │ [p₁]    [p₂]  ...  │         │      ↓              │                     │   │
+│  │   └─────────────────────┘         │  [final_result]     │─────────────────────┘   │
+│  │                                   └─────────────────────┘                         │
+│  │   Input padded to tile_size       n partials → 1 scalar                           │
+│  │   multiple with identity values                                                    │
+│  └───────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                      │
+│  On Terminate: emit accumulated result as single output element                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Supported Reduction Kernels
+
+| Kernel | Operation | Identity Value | Use Case |
+|--------|-----------|----------------|----------|
+| `ReduceKernel::Sum` | `a + b` | `0.0` | Aggregation, averages |
+| `ReduceKernel::Product` | `a × b` | `1.0` | Cumulative products |
+| `ReduceKernel::Min` | `min(a, b)` | `+∞` | Finding minimums |
+| `ReduceKernel::Max` | `max(a, b)` | `-∞` | Finding maximums |
+
+### Configuration
+
+```rust
+pub struct ReduceGpuConfig {
+    pub batch_size: usize,           // Items buffered before GPU flush (default: 65,536)
+    pub backend: ReduceGpuBackend,   // Auto, Wgpu, or Cuda
+    pub tile_size: usize,            // Elements per GPU reduction tile (default: 262,144)
+}
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `batch_size` | 65,536 (512 KiB) | Number of elements buffered before triggering a GPU reduction pass |
+| `tile_size` | 262,144 (1 MiB) | Elements per tile in the first reduction pass |
+| `backend` | `Auto` | GPU backend selection: `Auto`, `Wgpu`, or `Cuda` |
+
+### Precision Handling
+
+| Backend | GPU Precision | Public API | Conversion |
+|---------|--------------|------------|------------|
+| WGPU | `f32` | `f64` | Automatic `f64 ↔ f32` at API boundaries |
+| CUDA | `f64` | `f64` | Native, no conversion needed |
+
+> **Note:** WGPU uses `f32` precision internally, which may introduce small rounding errors for reductions over very large datasets. CUDA preserves full `f64` precision.
+
+### Usage Examples
+
+**Simple reduction with defaults:**
+
+```rust
+use renoir::prelude::*;
+use renoir::operator::ReduceKernel;
+
+let env = StreamContext::new_local();
+let result = env
+    .stream_iter(0..1_000_000)
+    .map(|x| x as f64)
+    .reduce_gpu(ReduceKernel::Sum)
+    .collect_vec();
+
+env.execute_blocking();
+// result contains a single f64 with the sum
+```
+
+**Custom configuration:**
+
+```rust
+use renoir::operator::{ReduceGpuConfig, ReduceGpuBackend, ReduceKernel};
+
+let config = ReduceGpuConfig::default()
+    .with_batch_size(1_000_000)
+    .with_tile_size(262_144)
+    .with_backend(ReduceGpuBackend::Wgpu);
+
+let result = env
+    .stream_iter(data.into_iter())
+    .reduce_gpu_with(ReduceKernel::Max, config)
+    .collect_vec();
+```
+
+### Multi-Pass Reduction Algorithm
+
+The GPU reduction uses a two-pass approach via CubeCL's `reduce` module:
+
+1. **Pass 1 (Tile Reduction):** The input batch is reshaped into a 2D tensor `[num_tiles, tile_size]`. Each tile is reduced along the column dimension, producing `num_tiles` partial results.
+
+2. **Pass 2 (Final Reduction):** The partial results are reduced to a single scalar value.
+
+This approach maps efficiently to GPU hardware because:
+- Each tile's reduction runs as an independent workgroup
+- Within each workgroup, threads cooperate via shared memory
+- The two-pass structure minimizes global memory traffic
 
 ---
 
@@ -2256,14 +2386,16 @@ The following structure shows the GPU-related files within the broader project:
 │   │   ├── black_scholes.rs           # Black-Scholes CPU vs GPU benchmark
 │   │   ├── common.rs                  # Shared utilities
 │   │   ├── mod.rs                     # Module exports
-│   │   └── monte_carlo.rs             # Monte Carlo CPU vs GPU benchmark
+│   │   ├── monte_carlo.rs             # Monte Carlo CPU vs GPU benchmark
+│   │   └── reduce.rs                  # Reduce operator CPU vs GPU benchmark
 │   ├── kafka.rs
 │   ├── nexmark.rs
 │   ├── shuffle.rs
 │   ├── tools
-│   │   ├── plot_benchmark.py          # Unified plotting tool
-│   │   ├── plot_monte_carlo.py        # Monte Carlo specific plotter
-│   │   └── plot_monte_carlo_paths.py  # Monte Carlo result plotting
+│   │   ├── plot_black_scholes.py       # Black-Scholes plotting tool
+│   │   ├── plot_monte_carlo.py        # Monte Carlo plotting tool
+│   │   ├── plot_monte_carlo_paths.py  # Monte Carlo result plotting
+│   │   └── plot_reduce_benchmark.py   # Reduce operator plotting tool
 │   └── wordcount.rs
 ├── examples
 │   ├── kernels                        # Reusable GPU kernels
@@ -2284,6 +2416,7 @@ The following structure shows the GPU-related files within the broader project:
 │   │   │   ├── kernel.rs              # GpuKernel trait definition
 │   │   │   ├── map_gpu.rs             # MapGpu operator
 │   │   │   └── mod.rs                 # Module exports
+│   │   ├── reduce_gpu.rs             # ReduceGpu operator (CubeCL reduce)
 │   │   └── ...                        # Other operators
 │   └── ...                            # Core library files
 └── tests
@@ -2337,8 +2470,9 @@ All GPU benchmarks are unified in a single directory with shared utilities:
 
 | Benchmark | File | Description |
 |-----------|------|-------------|
-| Black-Scholes | `black_scholes.rs` | CPU Sequential/Parallel vs GPU comparison |
-| Monte Carlo | `monte_carlo.rs` | CPU Sequential/Parallel vs GPU for path-dependent options |
+| Black-Scholes | `black_scholes.rs` | CPU Sequential/Parallel vs GPU for option pricing |
+| Monte Carlo | `monte_carlo.rs` | CPU Sequential/Parallel vs GPU for path-dependent simulation |
+| Reduce | `reduce.rs` | CPU Sequential/Parallel vs GPU for Sum, Product, Min, Max reductions |
 | Common | `common.rs` | Shared utilities: test sizes, formatting, JSON output, SystemConfig |
 
 #### Utilities (`src/utils/`)
@@ -2657,80 +2791,74 @@ cargo run --example gpu_batching_strategies --release --features gpu-wgpu
 
 ## Running Benchmarks
 
-The unified Black-Scholes benchmark compares CPU (sequential and parallel) with GPU performance.
+Three GPU benchmarks are available, each comparing CPU Sequential, CPU Parallel (Renoir), and GPU strategies.
 
-### Selecting a Backend for Benchmarks
-
-Benchmarks support multiple GPU backends:
+### Selecting a Backend
 
 ```bash
 # WGPU backend - works on AMD, NVIDIA, Intel, Apple
 cargo bench --bench gpu_black_scholes --features gpu-wgpu
 cargo bench --bench gpu_monte_carlo --features gpu-wgpu
+cargo bench --bench gpu_reduce --features gpu-wgpu
 
 # CUDA backend - NVIDIA only, requires CUDA toolkit
 cargo bench --bench gpu_black_scholes --features gpu-cuda
 cargo bench --bench gpu_monte_carlo --features gpu-cuda
+cargo bench --bench gpu_reduce --features gpu-cuda
 ```
 
 > [!TIP]
 > On systems with **AMD GPUs**, use `--features gpu-wgpu` which will automatically use Vulkan.
 > On systems with **NVIDIA GPUs**, you can use either backend, but `gpu-cuda` may offer slightly better performance.
 
-### Running the Benchmark
+### Running Individual Benchmarks
 
 ```bash
-# Run with default problem sizes (10K to 50M options)
+# Black-Scholes (map_gpu - element-wise pricing)
 cargo bench --bench gpu_black_scholes --features gpu-wgpu
 
-# Run with custom max problem size
-MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
+# Monte Carlo (map_gpu - path-dependent simulation)
+cargo bench --bench gpu_monte_carlo --features gpu-wgpu
 
-# Skip Criterion plots (faster)
-cargo bench --bench gpu_black_scholes --features gpu-wgpu -- --noplot
+# Reduce (reduce_gpu - Sum, Product, Min, Max)
+cargo bench --bench gpu_reduce --features gpu-wgpu
+
+# Custom max problem size
+MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
 ```
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MAX_OPTIONS` | Maximum problem size | 50,000,000 |
+| `MAX_OPTIONS` | Maximum problem size | Benchmark-dependent |
 
 ### Benchmark Output
 
-Results are saved to:
+Results are saved to dated directories under `benches/results/`:
+
 ```
-benches/results/black_scholes/YYYY-MM-DD/
-├── black_scholes_benchmark_TIMESTAMP.json
-└── plot_black_scholes_benchmark_TIMESTAMP.png
+benches/results/
+├── black_scholes/YYYY-MM-DD/
+│   ├── black_scholes_benchmark_TIMESTAMP.json
+│   └── plot_black_scholes_benchmark_TIMESTAMP.png
+├── monte_carlo/YYYY-MM-DD/
+│   ├── monte_carlo_benchmark_TIMESTAMP.json
+│   └── plot_monte_carlo_benchmark_TIMESTAMP.png
+└── reduce/YYYY-MM-DD/
+    ├── reduce_benchmark_TIMESTAMP.json
+    └── plot_reduce_benchmark_TIMESTAMP.png
 ```
 
-Example console output:
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║              Black-Scholes Renoir Benchmark: CPU vs GPU                      ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Test Sizes:     16 sizes from 10.0K to 50.0M                                ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-┌────┬───────────────┬──────────┬──────────┬──────────┬──────────┐
-│  # │     Size      │  CPU Seq │  CPU Par │    GPU   │ Seq/GPU  │
-├────┼───────────────┼──────────┼──────────┼──────────┼──────────┤
-│  1 │       10,000  │  0.001s  │  0.001s  │  0.001s  │   1.20x  │
-│  2 │    1,000,000  │  0.066s  │  0.013s  │  0.013s  │   4.69x  │
-│  3 │   10,000,000  │  0.660s  │  0.127s  │  0.131s  │   4.73x  │
-└────┴───────────────┴──────────┴──────────┴──────────┴──────────┘
-```
+Each benchmark automatically generates a chart with a standardized metadata footer showing system specs, GPU threads, batch sizes, and test parameters.
 
 ---
 
 ## Generating Charts
 
-After running benchmarks, generate visualization charts using the unified Python plotting tool.
+Each benchmark has a dedicated Python plotting script that generates a 2x3 grid of charts with a standardized metadata footer.
 
 ### Prerequisites
-
-Install the required Python packages:
 
 ```bash
 pip install matplotlib numpy
@@ -2739,25 +2867,34 @@ pip install matplotlib numpy
 ### Usage
 
 ```bash
-# Plot from a specific JSON file
-python3 benches/tools/plot_benchmark.py benches/results/black_scholes/2025-12-29/black_scholes_benchmark_*.json
+# Black-Scholes
+python3 benches/tools/plot_black_scholes.py black_scholes
+python3 benches/tools/plot_black_scholes.py benches/results/black_scholes/YYYY-MM-DD/black_scholes_benchmark_*.json
 
-# Or use benchmark type to plot the most recent file
-python3 benches/tools/plot_benchmark.py black_scholes
+# Monte Carlo
+python3 benches/tools/plot_monte_carlo.py monte_carlo
+python3 benches/tools/plot_monte_carlo.py benches/results/monte_carlo/YYYY-MM-DD/monte_carlo_benchmark_*.json
+
+# Reduce
+python3 benches/tools/plot_reduce_benchmark.py reduce
+python3 benches/tools/plot_reduce_benchmark.py benches/results/reduce/YYYY-MM-DD/reduce_benchmark_*.json
 ```
 
-### Chart Output
+### Chart Panels
 
-Charts are saved as PNG in the same directory as the JSON results:
-- `plot_black_scholes_benchmark_TIMESTAMP.png`
+All three plotters generate a 2x3 grid with these common panels:
 
-The chart includes 6 panels:
-1. **Execution Time vs Problem Size** - Log-log comparison
-2. **GPU Speedup Ratios** - Speedup vs Sequential and Parallel
-3. **Computational Throughput** - GFLOPS
-4. **Pricing Throughput** - Options/second
-5. **Average Speedup by Size Range** - Bar chart
-6. **Speedup Distribution** - Histogram
+| Panel | Content |
+|-------|---------|
+| **Top-Left** | Execution Time vs Problem Size (log-log) |
+| **Top-Center** | GPU Speedup vs Problem Size |
+| **Top-Right** | Computational Throughput (GFLOPS) |
+| **Bottom row** | Benchmark-specific analysis (throughput, bar charts, distributions) |
+
+### Metadata Footer
+
+Every chart includes a standardized footer with:
+`Platform | CPU: cores, RAM | GPU: device | Workers | GPU Threads | Batch | [benchmark-specific] | Sizes | Tests`
 
 ---
 
@@ -2813,6 +2950,8 @@ Each option requires approximately 28 bytes (5 inputs + 2 outputs × 4 bytes):
 
 ```rust
 impl<Op> Stream<Op> {
+    // ── map_gpu ──────────────────────────────────────────────────
+
     /// Apply GPU kernel with default batching (10M items)
     pub fn map_gpu<K>(self, kernel: K) -> Stream<impl Operator<Out = K::Output>>
     where
@@ -2826,6 +2965,49 @@ impl<Op> Stream<Op> {
     ) -> Stream<impl Operator<Out = K::Output>>
     where
         K: GpuKernel<Input = Op::Out>;
+
+    // ── reduce_gpu ───────────────────────────────────────────────
+
+    /// GPU-accelerated reduction with default config
+    pub fn reduce_gpu(self, kernel: ReduceKernel) -> Stream<impl Operator<Out = f64>>
+    where
+        Op::Out: Into<f64>;
+
+    /// GPU-accelerated reduction with custom config
+    pub fn reduce_gpu_with(
+        self,
+        kernel: ReduceKernel,
+        config: ReduceGpuConfig,
+    ) -> Stream<impl Operator<Out = f64>>
+    where
+        Op::Out: Into<f64>;
+}
+```
+
+### ReduceKernel Enum
+
+```rust
+pub enum ReduceKernel {
+    Sum,      // Identity: 0.0
+    Product,  // Identity: 1.0
+    Min,      // Identity: +∞
+    Max,      // Identity: -∞
+}
+```
+
+### ReduceGpuConfig Struct
+
+```rust
+pub struct ReduceGpuConfig {
+    pub batch_size: usize,           // Default: 65,536
+    pub backend: ReduceGpuBackend,   // Default: Auto
+    pub tile_size: usize,            // Default: 262,144
+}
+
+impl ReduceGpuConfig {
+    pub fn with_batch_size(self, size: usize) -> Self;
+    pub fn with_backend(self, backend: ReduceGpuBackend) -> Self;
+    pub fn with_tile_size(self, size: usize) -> Self;
 }
 ```
 
@@ -2950,83 +3132,36 @@ The benchmark provides **two separate performance measurements** for each execut
 
 ### Latest Benchmark Chart
 
-![Black-Scholes CPU vs GPU Benchmark Results](images/benchmark_chart.png)
+> Benchmark run: 2026-02-08 | Platform: macOS aarch64 | GPU: Apple M2 Pro (WGPU) | 12 CPU cores, 32 GB RAM
 
-### Chart Interpretation
-
-The benchmark chart contains 6 panels that together tell the complete performance story:
-
-#### Panel 1: Execution Time vs Problem Size (Top-Left)
-- **Log-log plot** showing how execution time scales with problem size
-- **CPU Sequential (blue)**: Slowest, grows linearly with problem size
-- **CPU Parallel (green)**: ~10x faster than sequential, scales well
-- **GPU (orange/red)**: Performance depends on problem size
-- **Crossover point**: GPU becomes faster than CPU Sequential at ~50,000 options
-
-#### Panel 2: GPU Speedup Ratios (Top-Center)
-- **Blue line**: Speedup vs CPU Sequential (peaks at ~5x for 5M options)
-- **Green line**: Speedup vs CPU Parallel (stays below 1.0x - CPU Parallel wins)
-- **Dashed line at 1.0x**: Break-even point
-- **Shaded regions**: Green = GPU faster, Red = GPU slower
-
-#### Panel 3: Computational Throughput (Top-Right)
-- **GFLOPS** (40 FLOPS per option × options/second)
-- CPU Parallel achieves **~3.16 GFLOPS** peak
-- GPU achieves **~2.97 GFLOPS** peak
-- Both plateau after initial warmup
-
-#### Panel 4: Pricing Throughput (Bottom-Left)
-- Options processed per second (log scale)
-- CPU Parallel: **~75-78M options/second** sustained
-- GPU: **~50-74M options/second** depending on problem size
-- Higher is better
-
-#### Panel 5: Average Speedup by Size Range (Bottom-Center)
-- Bar chart showing speedup grouped by problem size category
-- GPU shows best speedup (4-5x) in the 1M-10M range vs CPU Sequential
-- GPU underperforms vs CPU Parallel at all sizes
-
-#### Panel 6: Speedup Distribution (Bottom-Right)
-- Histogram of speedup values across all test sizes
-- Shows the distribution of GPU performance relative to CPU
+![Black-Scholes CPU vs GPU Benchmark Results](images/black_scholes_benchmark.png)
 
 ### Performance Summary
 
 | Metric | Value |
 |--------|-------|
-| **Problem size range** | 10K - 1B options |
-| **GPU break-even (vs Sequential)** | ~50,000 options |
-| **Best GPU speedup (vs Sequential)** | **4.98x** at 5M options |
-| **GPU vs CPU Parallel** | 0.47x median (CPU Parallel wins) |
-| **GPU wins vs Sequential** | 91.3% of tests |
+| **Problem size range** | 10K -- 75M options |
+| **Total tests** | 18 |
+| **GPU break-even (vs Sequential)** | ~75K options |
+| **Best GPU speedup (vs Sequential)** | **2.54x** at 1M options |
+| **Mean GPU speedup (vs Sequential)** | 1.70x |
+| **GPU vs CPU Parallel** | 0.30x mean (CPU Parallel wins) |
+| **GPU wins vs Sequential** | 83.3% of tests (15/18) |
 | **GPU wins vs Parallel** | 0% of tests |
-| **Peak GPU GFLOPS** | 2.97 |
-| **Peak CPU Parallel GFLOPS** | 3.16 |
+| **Peak GPU GFLOPS** | 1.48 |
+| **Peak CPU Parallel GFLOPS** | 4.50 |
 
 ### Key Insights
 
-1. **GPU excels vs single-threaded CPU**: 4-5x speedup for problems >100K options
-2. **CPU Parallel is highly competitive**: 12-core Apple Silicon outperforms GPU for this workload
-3. **Async pipelining works**: Flush times show 91%+ spent collecting previous batch (overlap achieved)
-4. **Streaming overhead is significant**: GPU overhead from buffering/emission reduces raw kernel performance
-5. **Optimal GPU batch size**: 5M items balances memory usage with throughput
-
-### When to Use GPU
-
-| Scenario | Recommendation |
-|----------|----------------|
-| Single-threaded environment | **GPU** (4-5x speedup) |
-| Multi-core CPU available | **CPU Parallel** (slightly faster) |
-| Memory-constrained | **GPU** (smaller batches possible) |
-| Very small batches (<50K) | **CPU** (GPU overhead dominates) |
+1. **GPU excels vs single-threaded CPU**: 2-2.5x speedup for problems >75K options
+2. **CPU Parallel is highly competitive**: 12-core Apple M2 Pro outperforms GPU for this workload due to the low arithmetic intensity (~40 FLOPs/option)
+3. **Black-Scholes is memory-bound on GPU**: At only 1.4 FLOP/byte, the GPU cannot fully exploit its compute capacity
+4. **Streaming overhead is significant**: GPU pipeline overhead (buffering, data transfer) reduces raw kernel performance
 
 ### Running the Benchmark
 
 ```bash
-# Run with default problem sizes (10K to 1B)
 cargo bench --bench gpu_black_scholes --features gpu-wgpu
-
-# Run with custom max size
 MAX_OPTIONS=100000000 cargo bench --bench gpu_black_scholes --features gpu-wgpu
 ```
 
@@ -4158,7 +4293,7 @@ put_out:  [5.21, 9.84, ...]   →   [Output₀, Output₁, ...]
 
 ## Monte Carlo Benchmark
 
-The Monte Carlo benchmark (`benches/gpu/monte_carlo.rs`) evaluates GPU performance for path-dependent option pricing.
+The Monte Carlo benchmark (`benches/gpu/monte_carlo.rs`) evaluates GPU performance for path-dependent option pricing -- a highly compute-intensive workload where GPU acceleration truly shines.
 
 ### Benchmark Configuration
 
@@ -4166,75 +4301,204 @@ The Monte Carlo benchmark (`benches/gpu/monte_carlo.rs`) evaluates GPU performan
 |-----------|-------|-------------|
 | MC_NUM_PATHS | 1,000 | Simulation paths per option |
 | MC_TIME_STEPS | 50 | Time steps per path |
+| FLOPs/option | ~1,000,000 | Total floating-point operations per option |
 | GPU_BATCH_SIZE | 100,000 | Maximum items per GPU batch |
-| Test Sizes | 10K, 100K, 1M | Options per test |
+| Test Sizes | 10K -- 2.5M | Options per test |
 
-### Seeding Strategy
+### Latest Benchmark Chart
 
-The benchmark uses a **two-tier seeding approach** to balance reproducibility with correctness:
+> Benchmark run: 2026-02-08 | Platform: macOS aarch64 | GPU: Apple M2 Pro (WGPU) | 12 CPU cores, 32 GB RAM
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      MONTE CARLO SEEDING STRATEGY                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Tier 1: INPUT GENERATION SEED (BENCHMARK_SEED = 42)                        │
-│  ─────────────────────────────────────────────────                          │
-│  Purpose: Generate reproducible test inputs (stock prices, strikes, etc.)   │
-│  Scope:   Benchmark-wide                                                    │
-│  Effect:  Same seed → same test options every run → fair comparisons        │
-│                                                                             │
-│                              ↓                                              │
-│                                                                             │
-│  Tier 2: PER-OPTION SIMULATION SEED (deterministic_seed(&input))            │
-│  ──────────────────────────────────────────────────────────────             │
-│  Purpose: Seed Monte Carlo RNG for each option's simulation                 │
-│  Scope:   Per-option (derived from input parameters)                        │
-│  Effect:  Same input → same seed → identical CPU/GPU results                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+![Monte Carlo CPU vs GPU Benchmark Results](images/monte_carlo_benchmark.png)
 
-**Why this matters:**
+### Benchmark Results
 
-| Without Two-Tier Seeding | With Two-Tier Seeding |
-|--------------------------|----------------------|
-| Different inputs each run | Reproducible benchmark inputs |
-| Can't compare runs fairly | Fair performance comparisons |
-| GPU might use different RNG | CPU and GPU produce identical results |
-| Validation would fail | Exact CPU/GPU validation possible |
+| Size | CPU Sequential | CPU Parallel | GPU | Speedup vs Seq | Speedup vs Par | GPU GFLOPS |
+|------|----------------|--------------|-----|----------------|----------------|------------|
+| 10K | 3.99s | 0.42s | 0.058s | **69x** | **7.6x** | 178 |
+| 25K | 9.91s | 1.04s | 0.038s | **263x** | **27.6x** | 662 |
+| 50K | 19.87s | 2.19s | 0.046s | **434x** | **47.7x** | 1,097 |
+| 100K | 39.18s | 4.30s | 0.055s | **722x** | **78.5x** | 1,822 |
+| 250K | 99.57s | 10.42s | 0.22s | **459x** | **48.1x** | 1,131 |
+| 500K | 206.44s | 21.28s | 0.49s | **420x** | **43.3x** | 1,018 |
+| 1M | 395.60s | 41.36s | 0.73s | **540x** | **56.5x** | 1,367 |
+| 2.5M | 985.92s | 101.47s | 1.91s | **517x** | **53.2x** | 1,310 |
+
+### Performance Summary
+
+| Metric | Value |
+|--------|-------|
+| **Problem size range** | 10K -- 2.5M options |
+| **Total tests** | 10 |
+| **Peak speedup (vs Sequential)** | **722x** at 100K options |
+| **Mean speedup (vs Sequential)** | 436x |
+| **Peak speedup (vs Parallel)** | **78.5x** at 100K options |
+| **Mean speedup (vs Parallel)** | 46.9x |
+| **Peak GPU GFLOPS** | 1,770 |
+| **Validation** | 10/10 passed |
+
+### Why Monte Carlo Shows Dramatically Better GPU Speedup
+
+| Metric | Black-Scholes | Monte Carlo | Ratio |
+|--------|---------------|-------------|-------|
+| FLOPs/option | ~40 | ~1,000,000 | 25,000x |
+| Bytes/option | 28 | 28 | 1x |
+| Arithmetic Intensity | 1.4 FLOP/byte | 35,714 FLOP/byte | 25,000x |
+| GPU Advantage | Memory-bound | **Compute-bound** | -- |
+| Peak GPU speedup vs Seq | 2.5x | **722x** | 289x |
+
+Monte Carlo's extremely high arithmetic intensity makes it **compute-bound**, allowing the GPU to fully utilize its massive parallel compute capacity without being limited by memory bandwidth. This is the ideal GPU workload profile.
 
 ### Running the Benchmark
 
 ```bash
-# Run Monte Carlo benchmark
 cargo bench --bench gpu_monte_carlo --features gpu-wgpu
-
-# Results saved to:
-# benches/results/monte_carlo/YYYY-MM-DD/monte_carlo_benchmark_YYYY-MM-DDTHH-MM-SS.json
+MAX_OPTIONS=5000000 cargo bench --bench gpu_monte_carlo --features gpu-wgpu
 ```
 
+---
 
-### Benchmark Results
+## Reduce Benchmark
 
-| Size | CPU Sequential | CPU Parallel | GPU | Speedup vs Seq | GFLOPS |
-|------|----------------|--------------|-----|----------------|--------|
-| 10K | 6.5s | 0.9s | 0.11s | **57x** | 88 |
-| 100K | 65s | 8.5s | 0.16s | **405x** | 624 |
-| 1M | 711s | 147s | 1.57s | **453x** | 638 |
+The Reduce benchmark (`benches/gpu/reduce.rs`) evaluates GPU performance for parallel reductions across four operators (Sum, Product, Min, Max), comparing CPU Sequential, Renoir Parallel, and GPU strategies.
 
-**Peak GPU throughput**: 638 GFLOPS (significantly higher than Black-Scholes due to higher arithmetic intensity)
+### Benchmark Configuration
 
-### Why Monte Carlo Shows Better GPU Speedup
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| GPU_BATCH_SIZE | 4,000,000 | Elements per GPU batch |
+| GPU_TILE_SIZE | 262,144 | Elements per reduction tile |
+| Operators | Sum, Product, Min, Max | All four reduction types |
+| Test Sizes | 10K -- 750M | Elements per test |
+| FLOPs/element | 1 | Single operation per element |
 
-| Metric | Black-Scholes | Monte Carlo |
-|--------|---------------|-------------|
-| FLOPs/option | ~40 | ~1,000,000 |
-| Bytes/option | 28 | 28 |
-| Arithmetic Intensity | 1.4 FLOP/byte | 35,714 FLOP/byte |
-| GPU Advantage | Memory-bound | **Compute-bound** |
+### Latest Benchmark Chart
 
-Monte Carlo's extremely high arithmetic intensity makes it **compute-bound**, allowing the GPU to fully utilize its massive parallel compute capacity without being limited by memory bandwidth.
+> Benchmark run: 2026-02-08 | Platform: macOS aarch64 | GPU: Apple M2 Pro (WGPU) | 12 CPU cores, 32 GB RAM
+
+![GPU Reduce Benchmark Results](images/reduce_benchmark.png)
+
+### Performance Summary
+
+| Metric | Sum | Product | Min | Max |
+|--------|-----|---------|-----|-----|
+| **Peak Seq/GPU speedup** | 0.47x | 0.63x | 0.07x | 0.07x |
+| **Peak Par/GPU speedup** | 0.51x | 0.39x | 0.71x | 0.36x |
+| **GPU wins vs Seq** | 0/22 | 0/22 | 0/22 | 0/22 |
+| **GPU wins vs Par** | 0/22 | 0/22 | 0/22 | 0/22 |
+| **Validation** | 22/22 | 22/22 | 22/22 | 22/22 |
+
+**Total tests:** 88 (22 sizes × 4 operators)
+
+### Key Insights
+
+1. **CPU wins for simple reductions**: Reduction is an extremely memory-bound operation (1 FLOP/element, 4-8 bytes/element). The GPU cannot overcome the data transfer overhead for such low arithmetic intensity.
+2. **GPU overhead dominates**: The cost of transferring data to the GPU and launching kernels exceeds the computation time for all tested sizes.
+3. **Validation passes consistently**: Despite using `f32` precision on WGPU, all results are within acceptable error margins.
+4. **Reduction is the worst-case GPU workload**: At only ~0.125-0.25 FLOP/byte arithmetic intensity, reductions are firmly in the memory-bound regime where CPUs with large caches excel.
+
+### Why Reduce Underperforms on GPU
+
+| Factor | Impact |
+|--------|--------|
+| **Arithmetic intensity** | 0.125--0.25 FLOP/byte (extremely low) |
+| **Data transfer** | Must copy all elements to GPU memory |
+| **Computation** | Single pass over data -- trivial for CPU |
+| **CPU cache advantage** | L1/L2 caches provide high bandwidth for sequential access |
+| **GPU launch overhead** | Kernel launch cost exceeds computation for small/medium sizes |
+
+### Running the Benchmark
+
+```bash
+cargo bench --bench gpu_reduce --features gpu-wgpu
+MAX_OPTIONS=100000000 cargo bench --bench gpu_reduce --features gpu-wgpu
+```
+
+---
+
+## Evaluation
+
+This section provides a comparative analysis of GPU acceleration across the three benchmark workloads, identifying the key factors that determine when GPU offloading is beneficial.
+
+### System Configuration
+
+| Component | Specification |
+|-----------|--------------|
+| **CPU** | Apple M2 Pro, 12 cores |
+| **GPU** | Apple M2 Pro (integrated, shared memory) |
+| **RAM** | 32 GB (unified memory) |
+| **GPU Backend** | WGPU (Metal) |
+| **GPU Threads** | 16,384 (estimated) |
+| **OS** | macOS aarch64 |
+
+### Cross-Benchmark Comparison
+
+| Benchmark | Operator | FLOPs/Item | Arithmetic Intensity | Peak GPU Speedup (vs Seq) | Peak GPU Speedup (vs Par) | Peak GPU GFLOPS |
+|-----------|----------|------------|---------------------|--------------------------|--------------------------|-----------------|
+| **Black-Scholes** | `map_gpu` | ~40 | 1.4 FLOP/byte | 2.54x | 0.38x | 1.48 |
+| **Monte Carlo** | `map_gpu` | ~1,000,000 | 35,714 FLOP/byte | 722x | 78.5x | 1,770 |
+| **Reduce** | `reduce_gpu` | 1 | 0.125 FLOP/byte | 0.63x | 0.71x | <1 |
+
+### GPU Speedup vs Arithmetic Intensity
+
+The results clearly demonstrate that **arithmetic intensity is the dominant factor** in determining GPU performance benefit:
+
+```
+Arithmetic Intensity (FLOP/byte)  │  GPU Speedup vs CPU Sequential
+──────────────────────────────────┼──────────────────────────────────
+  0.125  (Reduce)                 │  ████  0.07-0.63x  (CPU wins)
+  1.4    (Black-Scholes)          │  ██████████  0.03-2.54x  (mixed)
+  35,714 (Monte Carlo)            │  ██████████████████████████████████████  71-722x  (GPU dominates)
+```
+
+### Performance Regimes
+
+Based on the benchmark results, GPU workloads fall into three regimes:
+
+| Regime | Arithmetic Intensity | GPU Benefit | Example |
+|--------|---------------------|-------------|---------|
+| **Memory-bound** | < 1 FLOP/byte | CPU wins -- data transfer overhead exceeds compute savings | Reduce (Sum, Min, Max) |
+| **Transitional** | 1--100 FLOP/byte | Mixed -- GPU wins for large problems vs sequential CPU | Black-Scholes |
+| **Compute-bound** | > 100 FLOP/byte | GPU dominates -- massive speedups even vs parallel CPU | Monte Carlo |
+
+### Decision Framework: When to Use GPU
+
+| Factor | Favor GPU | Favor CPU |
+|--------|-----------|-----------|
+| **Arithmetic intensity** | > 10 FLOP/byte | < 1 FLOP/byte |
+| **Problem size** | > 100K elements | < 10K elements |
+| **CPU cores available** | Few (1--2) | Many (8+) |
+| **Workload type** | Embarrassingly parallel, compute-heavy | Simple, sequential access |
+| **Latency sensitivity** | Throughput-oriented | Latency-sensitive |
+
+### GPU Overhead Analysis
+
+The benchmarks reveal several sources of GPU overhead that affect all workloads:
+
+| Overhead Source | Approximate Cost | Impact |
+|-----------------|-----------------|--------|
+| **GPU initialization** | ~50ms (first call) | One-time, amortized over stream |
+| **Data transfer (CPU→GPU)** | ~0.1--1ms per batch | Proportional to data size |
+| **Kernel launch** | ~0.01--0.1ms | Fixed per batch |
+| **Result readback (GPU→CPU)** | ~0.1--1ms per batch | Proportional to output size |
+| **Precision conversion (f64→f32)** | ~0.01ms per batch | WGPU only |
+
+For compute-bound workloads (Monte Carlo), these overheads are negligible compared to the computation time. For memory-bound workloads (Reduce), they dominate the total execution time.
+
+### Recommendations
+
+1. **Use `map_gpu` for compute-intensive transformations** where each element requires significant computation (>100 FLOPs). Monte Carlo simulation (722x speedup) is the ideal use case.
+
+2. **Use `map_gpu` with caution for moderate-intensity workloads** like Black-Scholes (~40 FLOPs/element). GPU helps vs sequential CPU but may not beat parallel CPU on multi-core systems.
+
+3. **Prefer CPU `reduce_assoc` over `reduce_gpu` for simple aggregations** (Sum, Product, Min, Max). The GPU overhead cannot be justified for operations with near-zero arithmetic intensity.
+
+4. **`reduce_gpu` may be beneficial** when the reduction is part of a larger GPU pipeline (data already on GPU), or when custom reduction kernels with higher compute per element are used.
+
+5. **Batch size matters**: Larger batches amortize GPU overhead. The optimal batch size depends on the workload:
+   - Black-Scholes: 5M items
+   - Monte Carlo: 100K items
+   - Reduce: 4M items
 
 ---
 

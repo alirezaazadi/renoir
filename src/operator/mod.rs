@@ -98,6 +98,9 @@ mod zip;
 #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
 pub mod gpu;
 
+#[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+pub use gpu::reduce_gpu::{ReduceGpuBackend, ReduceGpuConfig, ReduceKernel};
+
 /// Marker trait that all the types inside a stream should implement.
 pub trait Data: Clone + Send + 'static {}
 impl<T: Clone + Send + 'static> Data for T {}
@@ -635,6 +638,71 @@ where
         K: gpu::GpuKernel<Input = Op::Out>,
     {
         self.add_operator(|prev| gpu::MapGpu::with_strategy(prev, kernel, strategy))
+    }
+
+    /// Reduce the entire stream to a single `f64` value on the GPU.
+    ///
+    /// The operator buffers incoming elements and dispatches batched reductions
+    /// to the GPU using CubeCL. The result is a single scalar produced by the
+    /// specified [`ReduceKernel`] (Sum, Product, Min, or Max).
+    ///
+    /// Uses the default [`ReduceGpuConfig`] (batch size 65 536, tile size 262 144).
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// use renoir::prelude::*;
+    /// use renoir::operator::{ReduceKernel, ReduceGpuConfig};
+    ///
+    /// let env = StreamContext::new_local();
+    /// let result = env
+    ///     .stream_iter((0..1_000_000).map(|x| x as f64))
+    ///     .reduce_gpu(ReduceKernel::Sum)
+    ///     .collect_vec();
+    /// env.execute_blocking();
+    /// ```
+    #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+    pub fn reduce_gpu(self, kernel: ReduceKernel) -> Stream<impl Operator<Out = f64>>
+    where
+        Op::Out: Into<f64>,
+    {
+        self.reduce_gpu_with(kernel, ReduceGpuConfig::default())
+    }
+
+    /// Reduce the entire stream to a single `f64` value on the GPU with custom
+    /// configuration.
+    ///
+    /// The [`ReduceGpuConfig`] controls batch size, tile size, and backend
+    /// selection. Larger batch and tile sizes improve throughput on big datasets.
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// use renoir::prelude::*;
+    /// use renoir::operator::{ReduceKernel, ReduceGpuConfig, ReduceGpuBackend};
+    ///
+    /// let config = ReduceGpuConfig::default()
+    ///     .with_batch_size(1_000_000)
+    ///     .with_tile_size(262_144)
+    ///     .with_backend(ReduceGpuBackend::Auto);
+    ///
+    /// let env = StreamContext::new_local();
+    /// let result = env
+    ///     .stream_iter((0..10_000_000).map(|x| x as f64))
+    ///     .reduce_gpu_with(ReduceKernel::Sum, config)
+    ///     .collect_vec();
+    /// env.execute_blocking();
+    /// ```
+    #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
+    pub fn reduce_gpu_with(
+        self,
+        kernel: ReduceKernel,
+        config: ReduceGpuConfig,
+    ) -> Stream<impl Operator<Out = f64>>
+    where
+        Op::Out: Into<f64>,
+    {
+        self.add_operator(|prev| gpu::reduce_gpu::ReduceGpu::new(prev, kernel, config))
     }
 
     /// Map the elements of the stream into new elements by evaluating a future for each one.
