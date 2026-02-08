@@ -112,32 +112,24 @@ Modern processors can be broadly categorized into two distinct architectural par
 
 The fundamental design choice in processor architecture is the trade-off between **latency** (time to complete a single task) and **throughput** (number of tasks completed per unit time) [2]:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THE FUNDAMENTAL TRADE-OFF                                    │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   LATENCY-OPTIMIZED (CPU)                 THROUGHPUT-OPTIMIZED (GPU)            │
-│   ───────────────────────                 ──────────────────────────            │
-│                                                                                 │
-│   Goal: Minimize time to                  Goal: Maximize tasks                  │
-│         complete ONE task                       completed per second            │
-│                                                                                 │
-│   Strategy:                               Strategy:                             │
-│   • Large caches                          • Many simple cores                   │
-│   • Complex control logic                 • High memory bandwidth               │
-│   • High clock frequency                  • Massive parallelism                 │
-│   • Branch prediction                     • Thread-level parallelism            │
-│   • Out-of-order execution                • Hide latency with threads           │
-│                                                                                 │
-│   Best for:                               Best for:                             │
-│   • Sequential algorithms                 • Data-parallel workloads             │
-│   • Complex control flow                  • Regular memory access               │
-│   • Low-latency requirements              • High-throughput requirements        │
-│   • Operating systems                     • Scientific computing                │
-│   • Database queries                      • Machine learning                    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph CPU_OPT["Latency-Optimized (CPU)"]
+        direction TB
+        CPU_GOAL["Goal: Minimize time to\ncomplete ONE task"]
+        CPU_STRAT["Strategy:\n• Large caches\n• Complex control logic\n• High clock frequency\n• Branch prediction\n• Out-of-order execution"]
+        CPU_BEST["Best for:\n• Sequential algorithms\n• Complex control flow\n• Low-latency requirements\n• Operating systems\n• Database queries"]
+    end
+
+    subgraph GPU_OPT["Throughput-Optimized (GPU)"]
+        direction TB
+        GPU_GOAL["Goal: Maximize tasks\ncompleted per second"]
+        GPU_STRAT["Strategy:\n• Many simple cores\n• High memory bandwidth\n• Massive parallelism\n• Thread-level parallelism\n• Hide latency with threads"]
+        GPU_BEST["Best for:\n• Data-parallel workloads\n• Regular memory access\n• High-throughput requirements\n• Scientific computing\n• Machine learning"]
+    end
+
+    style CPU_OPT fill:#cce5ff,stroke:#004085
+    style GPU_OPT fill:#d4edda,stroke:#155724
 ```
 
 #### Central Processing Unit (CPU) Architecture
@@ -146,39 +138,34 @@ CPUs are designed as general-purpose processors optimized for **low-latency** ex
 
 **CPU Core Architecture:**
 
+```mermaid
+flowchart TB
+    subgraph CPU_CORE["CPU Core Architecture"]
+        subgraph CONTROL["Control Logic (~50%)"]
+            BP["Branch\nPredictor"] ~~~ OOO["Out-of-Order\nExecution"] ~~~ SPEC["Speculative\nExecution"]
+        end
+
+        subgraph EXEC["Execution Units (~10%)"]
+            ALU1["ALU"] ~~~ ALU2["ALU"]
+            FPU1["FPU"] ~~~ FPU2["FPU"]
+            AGU1["AGU"] ~~~ AGU2["AGU"]
+        end
+
+        subgraph CACHE["Cache Hierarchy (~40%)"]
+            L1["L1 Cache: 32–64 KB\n(Data + Instruction)"]
+            L2["L2 Cache: 256 KB – 1 MB"]
+            L3["L3 Cache: 8 – 64 MB (shared)"]
+            L1 --> L2 --> L3
+        end
+    end
+
+    style CPU_CORE fill:#f9f9f9,stroke:#333
+    style CONTROL fill:#cce5ff,stroke:#004085
+    style EXEC fill:#fff3cd,stroke:#856404
+    style CACHE fill:#d4edda,stroke:#155724
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           CPU CORE ARCHITECTURE                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                        SINGLE CPU CORE                                  │   │
-│   │  ┌─────────────────────────────────────────────────────────────────┐    │   │
-│   │  │                    CONTROL LOGIC (~50%)                         │    │   │
-│   │  │  ┌───────────────┐ ┌───────────────┐ ┌───────────────────────┐  │    │   │
-│   │  │  │    Branch     │ │  Out-of-Order │ │     Speculative       │  │    │   │
-│   │  │  │   Predictor   │ │   Execution   │ │      Execution        │  │    │   │
-│   │  │  └───────────────┘ └───────────────┘ └───────────────────────┘  │    │   │
-│   │  └─────────────────────────────────────────────────────────────────┘    │   │
-│   │                                                                         │   │
-│   │  ┌─────────────────┐  ┌─────────────────────────────────────────────┐   │   │
-│   │  │  EXECUTION      │  │              CACHE HIERARCHY                │   │   │
-│   │  │  UNITS (~10%)   │  │                  (~40%)                     │   │   │
-│   │  │  ┌───┐ ┌───┐    │  │  ┌────────────────────────────────────┐     │   │   │
-│   │  │  │ALU│ │ALU│    │  │  │  L1 Cache: 32-64 KB (Data + Inst)  │     │   │   │
-│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤     │   │   │
-│   │  │  │FPU│ │FPU│    │  │  │  L2 Cache: 256 KB - 1 MB           │     │   │   │
-│   │  │  ├───┤ ├───┤    │  │  ├────────────────────────────────────┤     │   │   │
-│   │  │  │AGU│ │AGU│    │  │  │  L3 Cache: 8 - 64 MB (shared)      │     │   │   │
-│   │  │  └───┘ └───┘    │  │  └────────────────────────────────────┘     │   │   │
-│   │  └─────────────────┘  └─────────────────────────────────────────────┘   │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   ALU = Arithmetic Logic Unit    FPU = Floating Point Unit                      │
-│   AGU = Address Generation Unit                                                 │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **ALU** = Arithmetic Logic Unit | **FPU** = Floating Point Unit | **AGU** = Address Generation Unit
 
 **CPU Component Details:**
 
@@ -209,49 +196,28 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 
 **GPU Architecture Overview:**
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           GPU ARCHITECTURE OVERVIEW                             │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│  ┌───────────────────────────────────────────────────────────────────────────┐  │
-│  │                   STREAMING MULTIPROCESSOR (SM) × 40-144                  │  │
-│  │  ┌─────────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  WARP SCHEDULER      WARP SCHEDULER      WARP SCHEDULER             │  │  │
-│  │  │       │                    │                    │                   │  │  │
-│  │  │       ▼                    ▼                    ▼                   │  │  │
-│  │  │  ┌─────────┐          ┌─────────┐          ┌─────────┐              │  │  │
-│  │  │  │ 32 ALUs │          │ 32 ALUs │          │ 32 ALUs │    ...       │  │  │
-│  │  │  │ (INT32) │          │ (INT32) │          │ (INT32) │              │  │  │
-│  │  │  └─────────┘          └─────────┘          └─────────┘              │  │  │
-│  │  │  ┌─────────┐          ┌─────────┐          ┌─────────┐              │  │  │
-│  │  │  │ 32 FPUs │          │ 32 FPUs │          │ 32 FPUs │    ...       │  │  │
-│  │  │  │ (FP32)  │          │ (FP32)  │          │ (FP32)  │              │  │  │
-│  │  │  └─────────┘          └─────────┘          └─────────┘              │  │  │
-│  │  │  ┌─────────────────────────────────────────────────────────────┐    │  │  │
-│  │  │  │              TENSOR CORES (AI acceleration)                 │    │  │  │
-│  │  │  └─────────────────────────────────────────────────────────────┘    │  │  │
-│  │  │  ┌─────────────────────────────────────────────────────────────┐    │  │  │
-│  │  │  │              SPECIAL FUNCTION UNITS (sin, cos, exp, log)    │    │  │  │
-│  │  │  └─────────────────────────────────────────────────────────────┘    │  │  │
-│  │  │                                                                     │  │  │
-│  │  │  ┌─────────────────┐  ┌──────────────────────────────────────┐      │  │  │
-│  │  │  │ REGISTER FILE   │  │    SHARED MEMORY / L1 CACHE          │      │  │  │
-│  │  │  │   256 KB        │  │         48-164 KB                    │      │  │  │
-│  │  │  └─────────────────┘  └──────────────────────────────────────┘      │  │  │
-│  │  └─────────────────────────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐│
-│  │                           L2 CACHE (4-72 MB)                                ││
-│  └─────────────────────────────────────────────────────────────────────────────┘│
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐│
-│  │              GLOBAL MEMORY (VRAM) - HBM2/GDDR6 - 8-80 GB                    ││
-│  │                    Memory Bandwidth: 500 - 3,000 GB/s                       ││
-│  └─────────────────────────────────────────────────────────────────────────────┘│
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph GPU_ARCH["GPU Architecture Overview"]
+        subgraph SM["Streaming Multiprocessor (SM) × 40–144"]
+            direction TB
+            WS["Warp Schedulers\n(dispatch warps for execution)"]
+            WS --> ALU_ROW["32 ALUs (INT32) | 32 ALUs (INT32) | 32 ALUs (INT32) | ..."]
+            WS --> FPU_ROW["32 FPUs (FP32) | 32 FPUs (FP32) | 32 FPUs (FP32) | ..."]
+            TC["Tensor Cores (AI acceleration)"]
+            SFU["Special Function Units (sin, cos, exp, log)"]
+            REG["Register File: 256 KB"] ~~~ SHMEM["Shared Memory / L1 Cache: 48–164 KB"]
+        end
+
+        L2["L2 Cache (4–72 MB)"]
+        GMEM["Global Memory (VRAM) — HBM2/GDDR6 — 8–80 GB\nMemory Bandwidth: 500 – 3,000 GB/s"]
+        SM --> L2 --> GMEM
+    end
+
+    style GPU_ARCH fill:#f9f9f9,stroke:#333
+    style SM fill:#e8eaf4,stroke:#2d4a86
+    style L2 fill:#fff3cd,stroke:#856404
+    style GMEM fill:#f8d7da,stroke:#842029
 ```
 
 **GPU Component Details:**
@@ -271,26 +237,18 @@ GPUs are designed for **high-throughput** parallel execution of many similar tas
 
 #### Architectural Comparison Summary
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    CPU vs GPU ARCHITECTURE COMPARISON                           │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Metric              │ CPU (Modern Desktop)    │ GPU (Modern HPC)              │
-│   ────────────────────┼─────────────────────────┼───────────────────────────────│
-│   Cores               │ 8-24                    │ 5,000-16,000 (simple)         │
-│   Clock Speed         │ 3.5-5.5 GHz             │ 1.5-2.5 GHz                   │
-│   Peak FP32 TFLOPS    │ 0.5-2                   │ 10-80                         │
-│   Peak FP64 TFLOPS    │ 0.25-1                  │ 5-40 (HPC GPUs)               │
-│   Memory Bandwidth    │ 50-100 GB/s             │ 500-3,000 GB/s                │
-│   Cache               │ 64+ MB (L1+L2+L3)       │ 4-72 MB (L2)                  │
-│   Die Area (Control)  │ ~50%                    │ ~10%                          │
-│   Die Area (Compute)  │ ~10%                    │ ~70%                          │
-│   Power (TDP)         │ 65-250W                 │ 150-700W                      │
-│   Best For            │ Latency-sensitive       │ Throughput-intensive          │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+| Metric | CPU (Modern Desktop) | GPU (Modern HPC) |
+|--------|---------------------|-------------------|
+| **Cores** | 8–24 | 5,000–16,000 (simple) |
+| **Clock Speed** | 3.5–5.5 GHz | 1.5–2.5 GHz |
+| **Peak FP32 TFLOPS** | 0.5–2 | 10–80 |
+| **Peak FP64 TFLOPS** | 0.25–1 | 5–40 (HPC GPUs) |
+| **Memory Bandwidth** | 50–100 GB/s | 500–3,000 GB/s |
+| **Cache** | 64+ MB (L1+L2+L3) | 4–72 MB (L2) |
+| **Die Area (Control)** | ~50% | ~10% |
+| **Die Area (Compute)** | ~10% | ~70% |
+| **Power (TDP)** | 65–250W | 150–700W |
+| **Best For** | Latency-sensitive | Throughput-intensive |
 
 ### GPU Memory Hierarchy
 
@@ -298,49 +256,19 @@ GPU memory is organized in a hierarchy that trades off capacity for access laten
 
 **Memory Hierarchy Visualization:**
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         GPU MEMORY HIERARCHY                                    │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│                              ┌────────────┐                                     │
-│                        Thread│ REGISTERS  │                                     │
-│                              │ 255 max    │  ◄── Fastest: 1 cycle               │
-│                              │ per thread │      Highest bandwidth              │
-│                              └─────┬──────┘      Per-thread private             │
-│                                    │                                            │
-│                                    ▼                                            │
-│                    ┌───────────────────────────────┐                            │
-│               Block│     SHARED MEMORY / L1       │                             │
-│                    │       48 - 164 KB            │  ◄── Fast: 1-4 cycles       │
-│                    │       per SM                 │      ~10 TB/s bandwidth     │
-│                    │   (programmable scratchpad)  │      Shared within block    │
-│                    └───────────────┬───────────────┘                            │
-│                                    │                                            │
-│                                    ▼                                            │
-│              ┌─────────────────────────────────────────┐                        │
-│         GPU │              L2 CACHE                    │                        │
-│              │              4 - 72 MB                  │ ◄── Medium: ~200 cycles│
-│              │              (unified)                  │     ~4 TB/s bandwidth  │
-│              └───────────────────┬─────────────────────┘     Shared across SMs  │
-│                                  │                                              │
-│                                  ▼                                              │
-│       ┌──────────────────────────────────────────────────────┐                  │
-│  VRAM │             GLOBAL MEMORY (HBM2/GDDR6)               │                  │
-│       │                    8 - 80 GB                         │ ◄── Slow: ~500 cy│
-│       │              Bandwidth: 500-3000 GB/s                │     High capacity│
-│       └──────────────────────────┬───────────────────────────┘                  │
-│                                  │                                              │
-│                             PCIe/NVLink                                         │
-│                                  │                                              │
-│                                  ▼                                              │
-│      ┌───────────────────────────────────────────────────────────┐              │
-│ Host │               SYSTEM MEMORY (CPU RAM)                     │              │
-│      │                    16 - 256+ GB                           │ ◄── Slowest  │
-│      │              Bandwidth: 16-64 GB/s via PCIe               │     ~10K cy  │
-│      └───────────────────────────────────────────────────────────┘              │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    REG["REGISTERS (Thread)\n255 max per thread\nFastest: 1 cycle\nHighest bandwidth"]
+    REG --> SHMEM["SHARED MEMORY / L1 (Block)\n48–164 KB per SM\nFast: 1–4 cycles\n~10 TB/s bandwidth\nShared within block"]
+    SHMEM --> L2["L2 CACHE (GPU)\n4–72 MB (unified)\nMedium: ~200 cycles\n~4 TB/s bandwidth\nShared across SMs"]
+    L2 --> GMEM["GLOBAL MEMORY — VRAM (HBM2/GDDR6)\n8–80 GB\nSlow: ~500 cycles\nBandwidth: 500–3,000 GB/s"]
+    GMEM -->|"PCIe / NVLink"| SYSMEM["SYSTEM MEMORY — CPU RAM (Host)\n16–256+ GB\nSlowest: ~10K cycles\nBandwidth: 16–64 GB/s via PCIe"]
+
+    style REG fill:#d4edda,stroke:#155724
+    style SHMEM fill:#cce5ff,stroke:#004085
+    style L2 fill:#fff3cd,stroke:#856404
+    style GMEM fill:#f8d7da,stroke:#842029
+    style SYSMEM fill:#e2e3e5,stroke:#6c757d
 ```
 
 **Memory Type Characteristics:**
@@ -362,33 +290,24 @@ Modern GPUs use the **Single Instruction, Multiple Threads (SIMT)** execution mo
 
 #### SIMD vs SIMT Comparison
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         SIMD vs SIMT COMPARISON                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   SIMD (CPU Vector Extensions)              SIMT (GPU Execution Model)          │
-│   ─────────────────────────────             ────────────────────────            │
-│                                                                                 │
-│   ┌─────────────────────────┐              ┌─────────────────────────┐          │
-│   │  Vector Register        │              │  Warp (32 threads)      │          │
-│   │  ┌───┬───┬───┬───┐      │              │  ┌───┬───┬───┬───┬...┐  │          │
-│   │  │v0 │v1 │v2 │v3 │      │              │  │T0 │T1 │T2 │T3 │   │  │          │
-│   │  └───┴───┴───┴───┘      │              │  └───┴───┴───┴───┴...┘  │          │
-│   │        ↓                │              │        ↓                │          │
-│   │  ┌─────────────────┐    │              │  ┌─────────────────┐    │          │
-│   │  │   VADD.4F32     │    │              │  │      ADD        │    │          │
-│   │  │ (vector add 4×) │    │              │  │  (32 threads)   │    │          │
-│   │  └─────────────────┘    │              │  └─────────────────┘    │          │
-│   └─────────────────────────┘              └─────────────────────────┘          │
-│                                                                                 │
-│   • Programmer explicitly                  • Each thread has independent        │
-│     manages vector operations                program counter (logically)        │
-│   • Fixed vector width                     • Hardware manages divergence        │
-│   • No concept of threads                  • Threads can have unique state      │
-│   • Programmer handles masking             • Automatic predication              │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph SIMD["SIMD (CPU Vector Extensions)"]
+        direction TB
+        VREG["Vector Register\n[v0 | v1 | v2 | v3]"]
+        VREG --> VADD["VADD.4F32\n(vector add 4×)"]
+        SIMD_NOTES["• Programmer manages vector ops\n• Fixed vector width\n• No concept of threads\n• Programmer handles masking"]
+    end
+
+    subgraph SIMT["SIMT (GPU Execution Model)"]
+        direction TB
+        WARP["Warp (32 threads)\n[T0 | T1 | T2 | T3 | ...]"]
+        WARP --> ADD["ADD\n(32 threads)"]
+        SIMT_NOTES["• Independent program counters\n• Hardware manages divergence\n• Threads have unique state\n• Automatic predication"]
+    end
+
+    style SIMD fill:#cce5ff,stroke:#004085
+    style SIMT fill:#d4edda,stroke:#155724
 ```
 
 | Aspect | SIMD (CPU) | SIMT (GPU) |
@@ -408,74 +327,54 @@ Threads are organized into groups that execute in lockstep [1][2]:
 - **Wavefront** (AMD): 32 or 64 threads (architecture-dependent)
 - **Subgroup** (Vulkan/WebGPU): Platform-independent term, typically 32 threads
 
+```mermaid
+flowchart TB
+    subgraph GRID["Grid (All threads launched by a kernel)"]
+        subgraph B0["Block 0\n+ Shared Memory"]
+            W0_0["Warp 0\n(32 threads)"] ~~~ W0_1["Warp 1\n(32 threads)"]
+            W0_2["Warp 2\n(32 threads)"] ~~~ W0_3["Warp 3\n(32 threads)"]
+        end
+        subgraph B1["Block 1\n+ Shared Memory"]
+            W1_0["Warp 0\n(32 threads)"] ~~~ W1_1["Warp 1\n(32 threads)"]
+            W1_2["Warp 2\n(32 threads)"] ~~~ W1_3["Warp 3\n(32 threads)"]
+        end
+        subgraph B2["Block 2\n+ Shared Memory"]
+            W2_0["Warp 0\n(32 threads)"] ~~~ W2_1["Warp 1\n(32 threads)"]
+            W2_2["Warp 2\n(32 threads)"] ~~~ W2_3["Warp 3\n(32 threads)"]
+        end
+    end
+
+    style GRID fill:#f9f9f9,stroke:#333
+    style B0 fill:#cce5ff,stroke:#004085
+    style B1 fill:#cce5ff,stroke:#004085
+    style B2 fill:#cce5ff,stroke:#004085
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THREAD HIERARCHY IN GPU COMPUTING                            │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Grid (All threads launched by a kernel)                                       │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                                                                         │   │
-│   │   Block 0              Block 1              Block 2         ...         │   │
-│   │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │   │
-│   │   │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │  │ Warp 0  Warp 1  │         │   │
-│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │         │   │
-│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │         │   │
-│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │         │   │
-│   │   │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │  │ Warp 2  Warp 3  │         │   │
-│   │   │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │  │ ┌──┐    ┌──┐    │         │   │
-│   │   │ │32│    │32│    │  │ │32│    │32│    │  │ │32│    │32│    │         │   │
-│   │   │ └──┘    └──┘    │  │ └──┘    └──┘    │  │ └──┘    └──┘    │         │   │
-│   │   └─────────────────┘  └─────────────────┘  └─────────────────┘         │   │
-│   │         │                                                               │   │
-│   │   Shared Memory                                                         │   │
-│   │   (per block)                                                           │   │
-│   │                                                                         │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   Warp = 32 threads executing SAME instruction in lockstep                      │
-│   Block = Multiple warps sharing the same shared memory                         │
-│   Grid = All blocks launched by a single kernel                                 │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Warp** = 32 threads executing SAME instruction in lockstep | **Block** = Multiple warps sharing the same shared memory | **Grid** = All blocks launched by a single kernel
 
 #### Branch Divergence
 
 When threads within a warp take different branches, the GPU serializes execution [1][2]:
 
+```mermaid
+sequenceDiagram
+    participant T0_15 as Threads 0–15
+    participant T16_31 as Threads 16–31
+
+    Note over T0_15,T16_31: Before Branch (32 active)
+    rect rgb(200, 230, 200)
+        Note over T0_15: path_A() — Active
+        Note over T16_31: MASKED (idle)
+    end
+    rect rgb(200, 200, 230)
+        Note over T0_15: MASKED (idle)
+        Note over T16_31: path_B() — Active
+    end
+    Note over T0_15,T16_31: After Branch (32 active)
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                         BRANCH DIVERGENCE                                      │
-├────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│   Code:                                                                        │
-│   ┌─────────────────────────────────────┐                                      │
-│   │ if (threadIdx.x < 16) {             │                                      │
-│   │     path_A();  // Threads 0-15      │                                      │
-│   │ } else {                            │                                      │
-│   │     path_B();  // Threads 16-31     │                                      │
-│   │ }                                   │                                      │
-│   └─────────────────────────────────────┘                                      │
-│                                                                                │
-│   Execution Timeline:                                                          │
-│   ┌────────────────────────────────────────────────────────────────────────┐   │
-│   │                                                                        │   │
-│   │   Time →   ║ Before Branch ║  path_A()  ║  path_B()  ║ After Branch    │   │
-│   │   ─────────╬───────────────╬────────────╬────────────╬─────────────────│   │
-│   │   Threads  ║               ║            ║            ║                 │   │
-│   │    0-15    ║   Active      ║   Active   ║   MASKED   ║    Active       │   │
-│   │   16-31    ║   Active      ║   MASKED   ║   Active   ║    Active       │   │
-│   │            ║               ║            ║            ║                 │   │
-│   │   Total    ║   32 active   ║ 16 active  ║ 16 active  ║   32 active     │   │
-│   │   Cycles   ║      N        ║     M      ║     M      ║      P          │   │
-│   └────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                │
-│   Performance Impact: Both paths execute sequentially, doubling the time       │
-│   Best Practice: Minimize divergence; align branches with warp boundaries      │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Performance Impact:** Both paths execute sequentially, doubling the time.
+> **Best Practice:** Minimize divergence; align branches with warp boundaries.
 
 ### Performance Optimization Concepts
 
@@ -521,127 +420,97 @@ Occupancy = (Active Warps per SM) / (Maximum Warps per SM)
 
 GPUs hide memory latency through **massive thread-level parallelism** rather than large caches [2][3]:
 
+```mermaid
+gantt
+    title Latency Hiding — SM switches between warps to keep ALUs busy
+    dateFormat X
+    axisFormat %s
+
+    section Warp 0
+    Compute     :a0, 0, 50
+    Memory Load :crit, m0, 50, 550
+    Compute     :a0b, 550, 600
+
+    section Warp 1
+    Compute     :a1, 100, 150
+    Memory Load :crit, m1, 150, 650
+
+    section Warp 2
+    Compute     :a2, 200, 250
+    Memory Load :crit, m2, 250, 750
+
+    section Warp 3
+    Compute     :a3, 300, 350
+    Memory Load :crit, m3, 350, 850
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           LATENCY HIDING                                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Problem: Memory access takes ~500 cycles, but ALU operations take ~4 cycles   │
-│                                                                                 │
-│   Solution: Execute other warps while waiting for memory                        │
-│                                                                                 │
-│   Time (cycles) →                                                               │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │0       100      200      300      400      500      600      700        │   │
-│   │                                                                         │   │
-│   │Warp 0: [Compute]──►[Memory Load ═══════════════════════►][Compute]──►   │   │
-│   │                                                                         │   │
-│   │Warp 1:           [Compute]──►[Memory Load ═════════════════════►]       │   │
-│   │                                                                         │   │
-│   │Warp 2:                     [Compute]──►[Memory Load ═══════════════►]   │   │
-│   │                                                                         │   │
-│   │Warp 3:                               [Compute]──►[Memory Load ═════►]   │   │
-│   │                                                                         │   │
-│   │        ...more warps...                                                 │   │
-│   │                                                                         │   │
-│   │SM keeps switching between warps, so ALUs are always busy!               │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   Required Occupancy for Full Latency Hiding:                                   │
-│   Warps Needed ≥ Memory Latency (cycles) / Compute Latency (cycles)             │
-│   Example: 500 / 4 = 125 warps (if possible)                                    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Problem:** Memory access takes ~500 cycles, but ALU operations take ~4 cycles.
+> **Solution:** Execute other warps while waiting for memory. SM keeps switching between warps, so ALUs are always busy.
+> **Required Occupancy:** Warps Needed >= Memory Latency / Compute Latency (e.g., 500 / 4 = 125 warps)
 
 #### Memory Coalescing
 
 For optimal memory bandwidth utilization, threads in a warp should access **contiguous memory addresses** [3][4]:
 
+```mermaid
+flowchart TB
+    subgraph COAL["Coalesced Access (Optimal) — ONE 128-byte transaction"]
+        direction LR
+        CT["T0 T1 T2 ... T31"] --> CM["Memory: [0][1][2]...[31]\nContiguous addresses"]
+    end
+
+    subgraph STRIDE["Strided Access (Inefficient) — MULTIPLE transactions, 50% bandwidth wasted"]
+        direction LR
+        ST["T0 T1 T2 T3 ..."] --> SM_S["Memory: [0][_][2][_][4][_]...\nStride=2, gaps waste bandwidth"]
+    end
+
+    subgraph RANDOM["Random Access (Worst) — 32 separate transactions, ~3% bandwidth"]
+        direction LR
+        RT["T0 T1 T2 T3 ..."] --> RM["Memory: [7][100][42][999]...\nScattered, minimal coalescing"]
+    end
+
+    style COAL fill:#d4edda,stroke:#155724
+    style STRIDE fill:#fff3cd,stroke:#856404
+    style RANDOM fill:#f8d7da,stroke:#842029
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         MEMORY COALESCING                                       │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   COALESCED ACCESS (Optimal):                                                   │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread:    T0   T1   T2   T3   T4   T5   T6   T7  ...  T31            │   │
-│   │              ↓    ↓    ↓    ↓    ↓    ↓    ↓    ↓        ↓              │   │
-│   │   Memory:   [0]  [1]  [2]  [3]  [4]  [5]  [6]  [7] ... [31]             │   │
-│   │              └────────────────────────────────────────────┘             │   │
-│   │                        ONE 128-byte transaction                         │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   STRIDED ACCESS (Inefficient):                                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread:    T0        T1        T2        T3       ...                 │   │
-│   │              ↓         ↓         ↓         ↓                            │   │
-│   │   Memory:   [0] [_]   [2] [_]   [4] [_]   [6] [_]  ...    (stride=2)    │   │
-│   │              └─┘       └─┘       └─┘       └─┘                          │   │
-│   │              MULTIPLE transactions - 50% bandwidth wasted               │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   RANDOM ACCESS (Worst):                                                        │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread:    T0            T1              T2           T3  ...         │   │
-│   │              ↓              ↓               ↓            ↓              │   │
-│   │   Memory:   [7]   [...]   [100]   [...]   [42]  [...]  [999] ...        │   │
-│   │              └┘            └─┘             └─┘          └───┘           │   │
-│   │              32 separate transactions - minimal bandwidth utilization   │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   Performance Impact:                                                           │
-│   │ Access Pattern  │ Transactions │ Effective Bandwidth │                      │
-│   │─────────────────│──────────────│─────────────────────│                      │
-│   │ Coalesced       │      1       │      100%           │                      │
-│   │ Stride-2        │      2       │       50%           │                      │
-│   │ Stride-4        │      4       │       25%           │                      │
-│   │ Random          │     32       │      ~3%            │                      │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+| Access Pattern | Transactions | Effective Bandwidth |
+|---------------|-------------|---------------------|
+| Coalesced | 1 | 100% |
+| Stride-2 | 2 | 50% |
+| Stride-4 | 4 | 25% |
+| Random | 32 | ~3% |
 
 #### Vectorization (SIMD within SIMT)
 
 GPUs can process multiple data elements per thread using **vector types** [5]. This combines the SIMT execution model with SIMD-style data parallelism:
 
+```mermaid
+flowchart TB
+    subgraph SCALAR["Scalar Operation (1 element per thread)"]
+        direction TB
+        SC["T0: load a[0] → add → store result[0]\nT1: load a[1] → add → store result[1]\n...\nT31: load a[31] → add → store result[31]\n\nInstructions per warp: 32 loads + 32 adds + 32 stores = 96"]
+    end
+
+    subgraph VECTOR["Vectorized Operation (4 elements per thread — float4)"]
+        direction TB
+        VC["T0: load4 a[0:3] → add4 → store4 result[0:3]\nT1: load4 a[4:7] → add4 → store4 result[4:7]\n...\nT7: load4 a[28:31] → add4 → store4 result[28:31]\n\nInstructions per 8 threads: 8 loads + 8 adds + 8 stores = 24\n(4× fewer threads, 4× fewer instructions)"]
+    end
+
+    style SCALAR fill:#f8d7da,stroke:#842029
+    style VECTOR fill:#d4edda,stroke:#155724
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           VECTORIZATION                                         │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Scalar Operation (1 element per thread, per instruction):                     │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread T0:  load a[0] → add → store result[0]                         │   │
-│   │   Thread T1:  load a[1] → add → store result[1]                         │   │
-│   │   ...                                                                   │   │
-│   │   Thread T31: load a[31] → add → store result[31]                       │   │
-│   │                                                                         │   │
-│   │   Instructions per warp: 32 loads + 32 adds + 32 stores = 96            │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   Vectorized Operation (4 elements per thread, per instruction - float4):       │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │   Thread T0:  load4 a[0:3]   → add4 → store4 result[0:3]                │   │
-│   │   Thread T1:  load4 a[4:7]   → add4 → store4 result[4:7]                │   │
-│   │   ...                                                                   │   │
-│   │   Thread T7:  load4 a[28:31] → add4 → store4 result[28:31]              │   │
-│   │                                                                         │   │
-│   │   Instructions per 8 threads: 8 loads + 8 adds + 8 stores = 24          │   │
-│   │   (4× fewer threads needed, 4× fewer instructions)                      │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│   CubeCL Vectorization Example:                                                 │
-│   ```rust                                                                       │
-│   // Line<f32> with vectorization_factor=4 processes 4 floats at once           │
-│   #[cube]                                                                       │
-│   fn add_vectors<F: Float>(a: &Array<Line<F>>, b: &Array<Line<F>>,              │
-│                            out: &mut Array<Line<F>>) {                          │
-│       let idx = ABSOLUTE_POS;                                                   │
-│       out[idx] = a[idx] + b[idx];  // Adds 4 floats simultaneously              │
-│   }                                                                             │
-│   ```                                                                           │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+
+**CubeCL Vectorization Example:**
+
+```rust
+// Line<f32> with vectorization_factor=4 processes 4 floats at once
+#[cube]
+fn add_vectors<F: Float>(a: &Array<Line<F>>, b: &Array<Line<F>>,
+                         out: &mut Array<Line<F>>) {
+    let idx = ABSOLUTE_POS;
+    out[idx] = a[idx] + b[idx];  // Adds 4 floats simultaneously
+}
 ```
 
 **Vectorization Benefits:**
@@ -773,45 +642,30 @@ Renoir uses CubeCL to implement the `map_gpu` operator, providing:
 
 The `MapGpu` operator implements **async pipelining** for optimal GPU utilization:
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│                           MapGpu Operator (Async Pipelined)                          │
-│                                                                                      │
-│  ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────────┐    │
-│  │    Upstream     │      │   Kernel Buffer    │      │     Output Queue        │    │
-│  │    Operator     │─────▶│   (SoA format,     │      │   (results to emit      │    │
-│  │    .next()      │      │    push() items)   │      │    one by one)          │    │
-│  └─────────────────┘      └──────────┬─────────┘      └────────────┬────────────┘    │
-│                                      │                              ▲                │
-│                                      │ flush_to_gpu()               │                │
-│                                      ▼                              │                │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐   │
-│  │                          ASYNC PIPELINING                                     │   │
-│  │                                                                               │   │
-│  │   Batch N-1 (pending)              Batch N (current)                          │   │
-│  │   ┌─────────────────────┐          ┌─────────────────────┐                    │   │
-│  │   │  pending_handles    │          │  Launch kernel      │                    │   │
-│  │   │  pending_timestamps │◀─────────│  (async, no sync!)  │                    │   │
-│  │   └──────────┬──────────┘          └─────────────────────┘                    │   │
-│  │              │                                                                │   │
-│  │              │ read_one() + bytemuck::cast_slice()                            │   │
-│  │              ▼                                                                │   │
-│  │   ┌─────────────────────┐                                                     │   │
-│  │   │  Results from N-1   │─────────────────────────────────────────────────────┼───▶
-│  │   │  (matched with      │                                                     │   │
-│  │   │   timestamps)       │                                                     │   │
-│  │   └─────────────────────┘                                                     │   │
-│  │                                                                               │   │
-│  │   At end of stream: drain() collects final pending results                    │   │
-│  └───────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-│  Batching Strategy:                                                                  │
-│  - Fixed: flush every N items (default: 10M)                                         │
-│  - Timed: flush on timeout OR max size                                               │
-│  - Adaptive: adapt batch size based on throughput                                    │
-│                                                                                      │
-└──────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph MapGpu["MapGpu Operator (Async Pipelined)"]
+        direction TB
+        UP["Upstream Operator\n.next()"] --> KB["Kernel Buffer\n(SoA format, push items)"]
+        KB -->|"flush_to_gpu()"| PIPE
+
+        subgraph PIPE["Async Pipelining"]
+            direction TB
+            LAUNCH["Batch N (current)\nLaunch kernel\n(async, no sync!)"]
+            LAUNCH -->|"stored handles"| PEND["Batch N-1 (pending)\npending_handles\npending_timestamps"]
+            PEND -->|"read_one() +\nbytemuck::cast_slice()"| RES["Results from N-1\n(matched with timestamps)"]
+        end
+
+        RES --> OQ["Output Queue\n(results to emit one by one)"]
+    end
+
+    style MapGpu fill:#f9f9f9,stroke:#333
+    style PIPE fill:#e8f4e8,stroke:#2d862d
 ```
+
+> At end of stream, `drain()` collects final pending results.
+>
+> **Batching Strategy:** Fixed (flush every N items, default 10M) | Timed (flush on timeout OR max size) | Adaptive (adapt batch size based on throughput)
 
 ### Async Pipelining Benefits
 
@@ -853,35 +707,27 @@ The `reduce_gpu` operator performs GPU-accelerated parallel reductions on stream
 
 Unlike `map_gpu` which transforms each element independently, `reduce_gpu` accumulates stream elements into a single scalar result using a GPU-accelerated reduction tree:
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│                          ReduceGpu Operator (Batched Multi-Pass)                      │
-│                                                                                      │
-│  ┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────────┐    │
-│  │    Upstream     │      │   Value Buffer      │      │   Accumulator           │    │
-│  │    Operator     │─────▶│   (batch_size items, │      │   (running partial      │    │
-│  │    .next()      │      │    f32 or f64)       │      │    result)              │    │
-│  └─────────────────┘      └──────────┬──────────┘      └────────────┬────────────┘    │
-│                                      │                              ▲                │
-│                                      │ flush_batch()                │                │
-│                                      ▼                              │                │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐   │
-│  │                       GPU MULTI-PASS REDUCTION                               │   │
-│  │                                                                               │   │
-│  │   Pass 1: Tile Reduction          Pass 2: Final Reduction                     │   │
-│  │   ┌─────────────────────┐         ┌─────────────────────┐                     │   │
-│  │   │ [chunk₁][chunk₂]..  │         │ [partial₁, partial₂ │                     │   │
-│  │   │  ↓        ↓         │────────▶│   ... partialₙ]     │                     │   │
-│  │   │ [p₁]    [p₂]  ...  │         │      ↓              │                     │   │
-│  │   └─────────────────────┘         │  [final_result]     │─────────────────────┘   │
-│  │                                   └─────────────────────┘                         │
-│  │   Input padded to tile_size       n partials → 1 scalar                           │
-│  │   multiple with identity values                                                    │
-│  └───────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-│  On Terminate: emit accumulated result as single output element                      │
-└──────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph ReduceGpu["ReduceGpu Operator (Batched Multi-Pass)"]
+        direction TB
+        UP["Upstream Operator\n.next()"] --> VB["Value Buffer\n(batch_size items, f32 or f64)"]
+        VB -->|"flush_batch()"| GPU
+
+        subgraph GPU["GPU Multi-Pass Reduction"]
+            direction LR
+            P1["Pass 1: Tile Reduction\n[chunk₁][chunk₂]...\n→ [p₁] [p₂] ...\n(padded to tile_size\nwith identity values)"]
+            P1 --> P2["Pass 2: Final Reduction\n[partial₁, partial₂, ... partialₙ]\n→ [final_result]\n(n partials → 1 scalar)"]
+        end
+
+        GPU --> ACC["Accumulator\n(running partial result)"]
+    end
+
+    style ReduceGpu fill:#f9f9f9,stroke:#333
+    style GPU fill:#e8eaf4,stroke:#2d4a86
 ```
+
+> On Terminate: emit accumulated result as single output element.
 
 ### Supported Reduction Kernels
 
@@ -1313,18 +1159,19 @@ The denominator $4 \times 256 = 1024$ represents **options processed per cube**:
 | **256** | Threads per cube | CubeDim is set to 256 threads |
 | **1024** | Options per cube | $256 \text{ threads} \times 4 \text{ options/thread}$ |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      ONE CUBE (1024 options)                │
-├─────────────────────────────────────────────────────────────┤
-│  Thread 0:   [opt 0,   opt 1,   opt 2,   opt 3  ] → 4 opts  │
-│  Thread 1:   [opt 4,   opt 5,   opt 6,   opt 7  ] → 4 opts  │
-│  Thread 2:   [opt 8,   opt 9,   opt 10,  opt 11 ] → 4 opts  │
-│     ...              ...              ...                   │
-│  Thread 255: [opt 1020, opt 1021, opt 1022, opt 1023] → 4   │
-├─────────────────────────────────────────────────────────────┤
-│  Total: 256 threads × 4 options/thread = 1024 options       │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph CUBE["One Cube (1024 options)"]
+        direction TB
+        T0["Thread 0: [opt 0, opt 1, opt 2, opt 3] → 4 opts"]
+        T1["Thread 1: [opt 4, opt 5, opt 6, opt 7] → 4 opts"]
+        T2["Thread 2: [opt 8, opt 9, opt 10, opt 11] → 4 opts"]
+        TDOTS["..."]
+        T255["Thread 255: [opt 1020, opt 1021, opt 1022, opt 1023] → 4 opts"]
+        TOTAL["Total: 256 threads × 4 options/thread = 1024 options"]
+    end
+
+    style CUBE fill:#e8eaf4,stroke:#2d4a86
 ```
 
 **Example calculations:**
@@ -1447,17 +1294,18 @@ Vol (σ):        0.20   0.20   0.20   0.20   0.20   0.20   0.20   0.20
 
 With vectorization factor = 4, we need **2 threads** to process 8 options:
 
-```
-┌───────────────────────────────────────────────────────────────────────┐
-│  Thread 0 (ABSOLUTE_POS = 0)        │  Thread 1 (ABSOLUTE_POS = 1)    │
-│  Processes options [0,1,2,3]        │  Processes options [4,5,6,7]    │
-├───────────────────────────────────────────────────────────────────────┤
-│  Line<f32> s = [50, 55, 60, 65]     │  Line<f32> s = [70, 75, 80, 85] │
-│  Line<f32> k = [52, 54, 58, 62]     │  Line<f32> k = [68, 72, 78, 82] │
-│  Line<f32> t = [1.0, 1.0, 1.0, 1.0] │  (same)                         │
-│  Line<f32> r = [0.05, ...]          │  (same)                         │
-│  Line<f32> v = [0.20, ...]          │  (same)                         │
-└───────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph T0["Thread 0 (ABSOLUTE_POS = 0)\nProcesses options [0,1,2,3]"]
+        T0D["s = [50, 55, 60, 65]\nk = [52, 54, 58, 62]\nt = [1.0, 1.0, 1.0, 1.0]\nr = [0.05, ...]\nv = [0.20, ...]"]
+    end
+
+    subgraph T1["Thread 1 (ABSOLUTE_POS = 1)\nProcesses options [4,5,6,7]"]
+        T1D["s = [70, 75, 80, 85]\nk = [68, 72, 78, 82]\nt = (same)\nr = (same)\nv = (same)"]
+    end
+
+    style T0 fill:#cce5ff,stroke:#004085
+    style T1 fill:#d4edda,stroke:#155724
 ```
 
 ### Computation Steps (Thread 0)
@@ -1610,22 +1458,27 @@ Understanding where time is spent in GPU operations is critical for optimization
 
 The biggest bottleneck (GPU Sync, 50%) is **hidden** by overlapping execution:
 
-```text
-WITHOUT PIPELINING:
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌─────────┐
-│ Buffer │→│ Launch │→│  SYNC  │→│  Read  │→│Construct│   Total: ~60ms
-└────────┘ └────────┘ └────────┘ └────────┘ └─────────┘
-   15ms       0ms        33ms       4ms        8ms
+**Without Pipelining (Total: ~60ms):**
 
-WITH PIPELINING:
-          ┌──── Batch N ────┐
-          │ Buffer │ Launch │
-          └────────┴────────┘
-                ↓ stored handles
-┌───── Collect Batch N-1 ─────┐
-│ Read Previous │ Construct   │ ← overlapped with GPU compute!
-└───────────────┴─────────────┘
-              Total: ~20ms (no sync wait!)
+```mermaid
+flowchart LR
+    A["Buffer\n15ms"] --> B["Launch\n0ms"] --> C["SYNC\n33ms"] --> D["Read\n4ms"] --> E["Construct\n8ms"]
+    style C fill:#f8d7da,stroke:#842029
+```
+
+**With Pipelining (Total: ~20ms, no sync wait!):**
+
+```mermaid
+flowchart LR
+    subgraph BatchN["Batch N"]
+        B1["Buffer"] --> B2["Launch"]
+    end
+    B2 -->|"stored handles"| COLLECT
+    subgraph COLLECT["Collect Batch N-1 (overlapped with GPU compute)"]
+        C1["Read Previous"] --> C2["Construct"]
+    end
+
+    style COLLECT fill:#d4edda,stroke:#155724
 ```
 
 #### 2. bytemuck::cast_slice (Reduces Construct)
@@ -1750,24 +1603,14 @@ At approximately **1 million items**, several factors converge for optimal perfo
 
 Each batch in the pipelined execution incurs the following overhead:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    PER-BATCH OVERHEAD BREAKDOWN                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Phase                          │ Time (5M batch) │ % of Batch Time            │
-│   ───────────────────────────────┼─────────────────┼────────────────────────────│
-│   Collect Previous Results       │ ~21-25 ms       │ 90-92%                     │
-│   Buffer Creation/Allocation     │ ~2.0-2.2 ms     │ 8-10%                      │
-│   Kernel Launch                  │ ~0.01 ms        │ <0.1%                      │
-│   ───────────────────────────────┼─────────────────┼────────────────────────────│
-│   TOTAL (async, no sync wait)    │ ~23-25 ms       │ 100%                       │
-│                                                                                 │
-│   Key Observation: "Collect Previous" dominates!                                │
-│   This is the PCIe/memory bandwidth bottleneck for result transfer.             │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+| Phase | Time (5M batch) | % of Batch Time |
+|-------|----------------|-----------------|
+| Collect Previous Results | ~21–25 ms | 90–92% |
+| Buffer Creation/Allocation | ~2.0–2.2 ms | 8–10% |
+| Kernel Launch | ~0.01 ms | <0.1% |
+| **TOTAL (async, no sync wait)** | **~23–25 ms** | **100%** |
+
+> **Key Observation:** "Collect Previous" dominates. This is the PCIe/memory bandwidth bottleneck for result transfer.
 
 **Analysis**: The `Collect Previous` phase (reading results from GPU memory) takes ~21-25ms for 5M items:
 - 5M items × 8 bytes (call + put prices) = 40 MB of results
@@ -1776,36 +1619,32 @@ Each batch in the pipelined execution incurs the following overhead:
 
 #### Impact of Multi-Batch Execution
 
+**Single Batch** (1M items, batch_size=5M):
+
+```mermaid
+flowchart LR
+    K1["Kernel 1"] --> C1["Collect"]
+    style K1 fill:#cce5ff,stroke:#004085
+    style C1 fill:#d4edda,stroke:#155724
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    SINGLE BATCH vs MULTI-BATCH EXECUTION                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   Single Batch (1M items, batch_size=5M):                                       │
-│   ┌──────────────────────────────────────────────────────────┐                  │
-│   │ [Kernel 1] ───────────────────────────> [Collect]        │                  │
-│   └──────────────────────────────────────────────────────────┘                  │
-│   Total: 1 launch + 1 collect = minimal overhead                                │
-│                                                                                 │
-│   Multi-Batch (50M items, batch_size=5M = 10 batches):                          │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │ [K1]──►[Collect1]──►[K2]──►[Collect2]──► ... ──►[K10]──►[Collect10]     │   │
-│   │     ↑              ↑              ↑                                     │   │
-│   │ Sync Point     Sync Point     Sync Point (9 total sync points)          │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│   Total: 10 launches + 10 collects + 9 synchronizations                         │
-│                                                                                 │
-│   Even with async pipelining (overlapping execution):                           │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │ [K1]──────────►                                                         │   │
-│   │        [Collect1 + K2]──────────►                                       │   │
-│   │                        [Collect2 + K3]──────────►                       │   │
-│   │                                            ...                          │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│   Still: N-1 sequential collect operations that cannot be parallelized          │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+
+> Total: 1 launch + 1 collect = minimal overhead
+
+**Multi-Batch** (50M items, batch_size=5M = 10 batches):
+
+```mermaid
+flowchart LR
+    K1["K1"] -->|"Sync"| C1["Collect1"]
+    C1 --> K2["K2"] -->|"Sync"| C2["Collect2"]
+    C2 --> DOTS["..."]
+    DOTS --> K10["K10"] -->|"Sync"| C10["Collect10"]
+
+    style K1 fill:#cce5ff,stroke:#004085
+    style K2 fill:#cce5ff,stroke:#004085
+    style K10 fill:#cce5ff,stroke:#004085
 ```
+
+> Even with async pipelining (overlapping Collect + Kernel): N-1 sequential collect operations cannot be parallelized.
 
 ### Drop 2: Performance Degradation at 100M+ Items
 
@@ -1815,108 +1654,69 @@ The second performance drop at very large problem sizes (100M+ options) is cause
 
 #### 1. GPU L2 Cache Thrashing
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    L2 CACHE BEHAVIOR BY PROBLEM SIZE                            │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   GPU L2 Cache Size: 4-8 MB (Apple Silicon), 4-72 MB (discrete GPUs)            │
-│                                                                                 │
-│   Problem Size │ Working Set Size │ L2 Cache Status                             │
-│   ─────────────┼──────────────────┼─────────────────────────────────────────────│
-│   1M options   │    28 MB         │ Partial fit, good reuse                     │
-│   5M options   │   140 MB         │ Thrashing begins                            │
-│   10M options  │   280 MB         │ Severe thrashing                            │
-│   100M options │   2.8 GB         │ Complete thrashing (70-700× cache size)     │
-│   1B options   │    28 GB         │ Continuous cache misses                     │
-│                                                                                 │
-│   Impact: Every memory access becomes a cache miss at large sizes               │
-│           Full global memory latency (~500 cycles) for all accesses             │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+GPU L2 Cache Size: 4–8 MB (Apple Silicon), 4–72 MB (discrete GPUs)
+
+| Problem Size | Working Set Size | L2 Cache Status |
+|-------------|-----------------|-----------------|
+| 1M options | 28 MB | Partial fit, good reuse |
+| 5M options | 140 MB | Thrashing begins |
+| 10M options | 280 MB | Severe thrashing |
+| 100M options | 2.8 GB | Complete thrashing (70–700× cache size) |
+| 1B options | 28 GB | Continuous cache misses |
+
+> **Impact:** Every memory access becomes a cache miss at large sizes. Full global memory latency (~500 cycles) for all accesses.
 
 #### 2. Memory Bandwidth Saturation
 
 The Black-Scholes kernel requires significant memory bandwidth:
 
-```
-Memory Traffic per Option:
-├── Input: 5 × f32 (spot, strike, rate, time, volatility) = 20 bytes READ
-├── Output: 2 × f32 (call_price, put_price) = 8 bytes WRITE
-└── Total: 28 bytes per option
+**Memory Traffic per Option:** Input: 5 × f32 = 20 bytes READ | Output: 2 × f32 = 8 bytes WRITE | Total: 28 bytes/option
 
-Bandwidth Requirements at Different Scales:
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ Problem Size │ Data Volume │ @ 50M opts/s │ Required Bandwidth                  │
-│──────────────┼─────────────┼──────────────┼─────────────────────────────────────│
-│ 10M options  │ 280 MB      │ 5 sec/batch  │ 1.4 GB/s (well within limits)       │
-│ 100M options │ 2.8 GB      │ 2 sec        │ 1.4 GB/s (sustained pressure)       │
-│ 1B options   │ 28 GB       │ 20 sec       │ 1.4 GB/s + memory controller stress │
-└─────────────────────────────────────────────────────────────────────────────────┘
+| Problem Size | Data Volume | @ 50M opts/s | Required Bandwidth |
+|-------------|-------------|-------------|-------------------|
+| 10M options | 280 MB | 5 sec/batch | 1.4 GB/s (well within limits) |
+| 100M options | 2.8 GB | 2 sec | 1.4 GB/s (sustained pressure) |
+| 1B options | 28 GB | 20 sec | 1.4 GB/s + memory controller stress |
 
-Note: While 1.4 GB/s seems low compared to theoretical bandwidth (100-400 GB/s),
-the actual bottleneck is the streaming/batching overhead, not raw bandwidth.
-```
+> While 1.4 GB/s seems low compared to theoretical bandwidth (100–400 GB/s), the actual bottleneck is the streaming/batching overhead, not raw bandwidth.
 
 #### 3. Thermal Throttling (Long-Running Workloads)
 
+```mermaid
+flowchart LR
+    subgraph THERMAL["Thermal Behavior Over Time"]
+        direction LR
+        T0["0s\nMax freq"] --> T10["10s\n~95%"]
+        T10 --> T30["30s\n~90%"]
+        T30 --> T60["60s\n~85%"]
+        T60 --> T120["120s\n~80%"]
+        T120 --> T300["300s\n~70%\nThrottle Zone"]
+    end
+
+    style T0 fill:#d4edda,stroke:#155724
+    style T300 fill:#f8d7da,stroke:#842029
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    THERMAL BEHAVIOR OVER TIME                                   │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   GPU Frequency                                                                 │
-│       │                                                                         │
-│   Max ├────╲                                                                    │
-│       │     ╲                                                                   │
-│   90% │      ╲____                                                              │
-│       │           ╲                                                             │
-│   80% │            ╲_______                                                     │
-│       │                    ╲_________ Thermal Throttle Zone                     │
-│   70% │                                                                         │
-│       └─────────────────────────────────────────────────────────────────── Time │
-│       0s    10s    30s    60s   120s   300s                                     │
-│                                                                                 │
-│   Small problems: Complete before throttling kicks in                           │
-│   Large problems (100M+): Run long enough to hit thermal limits                 │
-│                                                                                 │
-│   Observation: First batches in a long run are faster than later batches        │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Small problems:** Complete before throttling kicks in.
+> **Large problems (100M+):** Run long enough to hit thermal limits. First batches are faster than later batches.
 
 #### 4. Unified Memory Contention (Apple Silicon Specific)
 
+```mermaid
+flowchart TB
+    MEM["Unified Memory Pool\n(16–128 GB)"]
+    MEM --> CPU_C["CPU Cores\n(P + E)"]
+    MEM --> GPU_C["GPU Cores"]
+    MEM --> NE["Neural Engine"]
+
+    style MEM fill:#fff3cd,stroke:#856404
+    style CPU_C fill:#cce5ff,stroke:#004085
+    style GPU_C fill:#d4edda,stroke:#155724
+    style NE fill:#e2e3e5,stroke:#6c757d
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    APPLE SILICON UNIFIED MEMORY ARCHITECTURE                    │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│                        ┌─────────────────────────┐                              │
-│                        │   Unified Memory Pool   │                              │
-│                        │      (16-128 GB)        │                              │
-│                        └───────────┬─────────────┘                              │
-│                                    │                                            │
-│                    ┌───────────────┼───────────────┐                            │
-│                    │               │               │                            │
-│                    ▼               ▼               ▼                            │
-│           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                     │
-│           │  CPU Cores  │  │    GPU      │  │   Neural    │                     │
-│           │   (P + E)   │  │   Cores     │  │   Engine    │                     │
-│           └─────────────┘  └─────────────┘  └─────────────┘                     │
-│                                                                                 │
-│   Advantage: No PCIe transfer needed (data already in shared memory)            │
-│   Disadvantage: All processors compete for same memory bandwidth                │
-│                                                                                 │
-│   At large problem sizes:                                                       │
-│   - CPU threads (benchmark overhead) compete with GPU for memory                │
-│   - Memory controller becomes bottleneck                                        │
-│   - TLB (Translation Lookaside Buffer) pressure increases                       │
-│   - Page table walks become more frequent                                       │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Advantage:** No PCIe transfer needed (data already in shared memory).
+> **Disadvantage:** All processors compete for same memory bandwidth. At large problem sizes: CPU threads compete with GPU for memory, memory controller becomes bottleneck, TLB pressure increases, page table walks become more frequent.
 
 ### Why CPU Parallel Outperforms GPU on Apple Silicon
 
@@ -1935,36 +1735,31 @@ The benchmark results show CPU Parallel winning at **all problem sizes** on Appl
 
 #### The Streaming/Batching Overhead Problem
 
+**CPU Parallel Execution:**
+
+```mermaid
+flowchart LR
+    subgraph CPU_PAR["CPU Parallel — Direct processing, no batching"]
+        direction TB
+        CT0["Thread 0: item 0 → item 12 → item 24 → ..."]
+        CT1["Thread 1: item 1 → item 13 → item 25 → ..."]
+        CT11["Thread 11: item 11 → item 23 → item 35 → ..."]
+    end
+    style CPU_PAR fill:#d4edda,stroke:#155724
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    CPU PARALLEL vs GPU STREAMING OVERHEAD                       │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   CPU Parallel Execution:                                                       │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │ Thread 0: [Process item 0] [Process item 12] [Process item 24] ...      │   │
-│   │ Thread 1: [Process item 1] [Process item 13] [Process item 25] ...      │   │
-│   │ ...                                                                     │   │
-│   │ Thread 11:[Process item 11][Process item 23] [Process item 35] ...      │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│   → Direct processing, no batching, no synchronization points                   │
-│                                                                                 │
-│   GPU Streaming Execution:                                                      │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │ [Collect items into batch] →                                            │   │
-│   │   [Convert AoS → SoA] →                                                 │   │
-│   │     [Allocate GPU buffers] →                                            │   │
-│   │       [Copy to GPU] →                                                   │   │
-│   │         [Launch kernel] →                                               │   │
-│   │           [Wait for completion] →                                       │   │
-│   │             [Copy results back] →                                       │   │
-│   │               [Convert SoA → AoS] →                                     │   │
-│   │                 [Emit results]                                          │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
-│   → Many steps, each with overhead; amortized over batch but never zero         │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+
+**GPU Streaming Execution:**
+
+```mermaid
+flowchart LR
+    A["Collect items\ninto batch"] --> B["Convert\nAoS → SoA"] --> C["Allocate\nGPU buffers"] --> D["Copy to\nGPU"] --> E["Launch\nkernel"] --> F["Wait for\ncompletion"] --> G["Copy results\nback"] --> H["Convert\nSoA → AoS"] --> I["Emit\nresults"]
+
+    style A fill:#fff3cd,stroke:#856404
+    style E fill:#cce5ff,stroke:#004085
+    style I fill:#d4edda,stroke:#155724
 ```
+
+> Many steps, each with overhead; amortized over batch but never zero.
 
 #### When GPU Would Win
 
@@ -2063,17 +1858,14 @@ At 250M+ options, the memory controller approaches saturation, causing:
 
 On Apple M-series chips, CPU and GPU **share the same memory**:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Unified Memory (16-128 GB)                │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐       ┌─────────────┐       ┌─────────────┐│
-│  │  CPU Cores  │ ←───→ │  Memory     │ ←───→ │  GPU Cores  ││
-│  │  (P+E)      │       │  Controller │       │  (Apple GPU)││
-│  └─────────────┘       └─────────────┘       └─────────────┘│
-│                              ↑                              │
-│                         Contention                          │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph UM["Unified Memory (16–128 GB)"]
+        CPU_C2["CPU Cores\n(P+E)"] <-->|"Contention"| MC["Memory\nController"]
+        MC <-->|"Contention"| GPU_C2["GPU Cores\n(Apple GPU)"]
+    end
+
+    style UM fill:#fff3cd,stroke:#856404
 ```
 
 With very large allocations:
@@ -2181,54 +1973,49 @@ reducing memory pressure and allowing better GPU utilization.
 
 **How Pipelining Works:**
 
-```text
 For datasets > 50M options (e.g., 150M options split into 3 chunks):
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         PIPELINED GPU PROCESSING                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Input Data (150M options)                                                  │
-│  ┌─────────────────┬─────────────────┬─────────────────┐                    │
-│  │    Chunk 1      │    Chunk 2      │    Chunk 3      │                    │
-│  │   (50M opts)    │   (50M opts)    │   (50M opts)    │                    │
-│  └────────┬────────┴────────┬────────┴────────┬────────┘                    │
-│           │                 │                 │                             │
-│           ▼                 ▼                 ▼                             │
-│  ┌─────────────────┐┌─────────────────┐┌─────────────────┐                  │
-│  │   GPU Kernel    ││   GPU Kernel    ││   GPU Kernel    │                  │
-│  │   Execution     ││   Execution     ││   Execution     │                  │
-│  │   (~1.4 GB)     ││   (~1.4 GB)     ││   (~1.4 GB)     │                  │
-│  └────────┬────────┘└────────┬────────┘└────────┬────────┘                  │
-│           │                 │                 │                             │
-│           ▼                 ▼                 ▼                             │
-│  ┌─────────────────┐┌─────────────────┐┌─────────────────┐                  │
-│  │    Results 1    ││    Results 2    ││    Results 3    │                  │
-│  │   (50M outputs) ││   (50M outputs) ││   (50M outputs) │                  │
-│  └────────┬────────┘└────────┬────────┘└────────┬────────┘                  │
-│           │                 │                 │                             │
-│           └─────────────────┴─────────────────┘                             │
-│                             │                                               │
-│                             ▼                                               │
-│                    ┌─────────────────┐                                      │
-│                    │ Combined Results│                                      │
-│                    │  (150M outputs) │                                      │
-│                    └─────────────────┘                                      │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Pipeline["Pipelined GPU Processing"]
+        direction TB
+        INPUT["Input Data (150M options)"]
 
-Timeline (sequential processing):
-─────────────────────────────────────────────────────────────────────────────→
+        INPUT --> C1["Chunk 1\n(50M opts)"]
+        INPUT --> C2["Chunk 2\n(50M opts)"]
+        INPUT --> C3["Chunk 3\n(50M opts)"]
 
- [Chunk 1: GPU Exec] → [Chunk 2: GPU Exec] → [Chunk 3: GPU Exec]
-      ~0.5s                 ~0.5s                 ~0.5s
-                                                            Total: ~1.5s
+        C1 --> K1["GPU Kernel\nExecution\n(~1.4 GB)"]
+        C2 --> K2["GPU Kernel\nExecution\n(~1.4 GB)"]
+        C3 --> K3["GPU Kernel\nExecution\n(~1.4 GB)"]
 
-vs. Single Batch (150M at once):
-─────────────────────────────────────────────────────────────────────────────→
+        K1 --> R1["Results 1\n(50M outputs)"]
+        K2 --> R2["Results 2\n(50M outputs)"]
+        K3 --> R3["Results 3\n(50M outputs)"]
 
- [Single Batch: 150M options - HIGH MEMORY PRESSURE]
-                         ~2.0s+ (with potential thrashing)
+        R1 --> COMBINED["Combined Results\n(150M outputs)"]
+        R2 --> COMBINED
+        R3 --> COMBINED
+    end
+
+    style Pipeline fill:#f9f9f9,stroke:#333
+```
+
+**Timeline comparison:**
+
+```mermaid
+gantt
+    title Pipelined vs Single Batch Processing
+    dateFormat X
+    axisFormat %s
+
+    section Pipelined (~1.5s)
+    Chunk 1 GPU Exec (~0.5s) :a1, 0, 500
+    Chunk 2 GPU Exec (~0.5s) :a2, 500, 1000
+    Chunk 3 GPU Exec (~0.5s) :a3, 1000, 1500
+
+    section Single Batch
+    150M options - HIGH MEMORY PRESSURE (~2.0s+) :crit, b1, 0, 2000
 ```
 
 **Usage Example:**
@@ -3094,33 +2881,27 @@ The benchmark provides **two separate performance measurements** for each execut
 | **Compute Only** | Pure computation time without result collection | Measures raw processing speed |
 | **Overall (Total)** | Compute + result collection/fetch | Measures real-world end-to-end performance |
 
+**Compute Only Timing:**
+
+```mermaid
+flowchart LR
+    S1["Stream Processing"] --> C1["Computation"] --> D1["(Discard)"]
+    style D1 fill:#e2e3e5,stroke:#6c757d
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    TIMING MEASUREMENT BREAKDOWN                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   COMPUTE ONLY TIMING:                                                          │
-│   ┌─────────────────────────────────────────────────────────┐                   │
-│   │ [Stream Processing] ──► [Computation] ──► (Discard)     │                   │
-│   │                                                         │                   │
-│   │ Measures: Pure compute performance without I/O overhead │                   │
-│   │ Use case: Compare raw algorithmic efficiency            │                   │
-│   └─────────────────────────────────────────────────────────┘                   │
-│                                                                                 │
-│   OVERALL (TOTAL) TIMING:                                                       │
-│   ┌─────────────────────────────────────────────────────────┐                   │
-│   │ [Stream Processing] ──► [Computation] ──► [Collect Vec] │                   │
-│   │                                                         │                   │
-│   │ Measures: End-to-end performance including result fetch │                   │
-│   │ Use case: Realistic application performance             │                   │
-│   └─────────────────────────────────────────────────────────┘                   │
-│                                                                                 │
-│   For GPU workloads, the difference can be significant:                         │
-│   - Compute Only: Excludes GPU→CPU data transfer overhead                       │
-│   - Overall: Includes buffer allocation, synchronization, and result transfer   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+
+> Measures pure compute performance without I/O overhead. Use case: Compare raw algorithmic efficiency.
+
+**Overall (Total) Timing:**
+
+```mermaid
+flowchart LR
+    S2["Stream Processing"] --> C2["Computation"] --> COL["Collect Vec"]
+    style COL fill:#fff3cd,stroke:#856404
 ```
+
+> Measures end-to-end performance including result fetch. Use case: Realistic application performance.
+>
+> For GPU workloads, the difference can be significant: Compute Only excludes GPU→CPU data transfer; Overall includes buffer allocation, synchronization, and result transfer.
 
 **Why This Matters:**
 
@@ -3189,14 +2970,14 @@ Before diving into the algorithm, let's understand the fundamental concepts:
 
 The **strike price** is the predetermined price at which an option can be exercised:
 
-```text
-                           Strike K = $105
-                               │
-                               │
-    ◄─────── Below Strike ─────┼───── Above Strike ──────►
-                               │
-    Stock at $90               │              Stock at $120
-    (call option worthless)    │         (call option valuable)
+```mermaid
+flowchart LR
+    BELOW["Stock at $90\n(call option worthless)"] --- STRIKE["Strike K = $105"]
+    STRIKE --- ABOVE["Stock at $120\n(call option valuable)"]
+
+    style BELOW fill:#f8d7da,stroke:#842029
+    style STRIKE fill:#fff3cd,stroke:#856404
+    style ABOVE fill:#d4edda,stroke:#155724
 ```
 
 - For a **call option**: The holder has the right to *buy* the stock at price K
@@ -3206,25 +2987,17 @@ The **strike price** is the predetermined price at which an option can be exerci
 
 These terms describe whether an option would be profitable if exercised immediately:
 
-```text
-Price
-  │
-  │     ┌─────────────────────────────────────────────────────┐
-  │     │                                                     │
-130│    │                 ITM REGION (Call)                   │
-  │     │         (Stock > Strike = Option has value)         │
-  │     │                                                     │
-  │     │   Payoff = Stock Price - Strike = $130 - $105 = $25 │
-  │     └─────────────────────────────────────────────────────┘
-105│ ═══════════════════ STRIKE K = $105 ═════════════════════
-  │     ┌─────────────────────────────────────────────────────┐
-  │     │                                                     │
- 80│    │                 OTM REGION (Call)                   │
-  │     │         (Stock < Strike = Option worthless)         │
-  │     │                                                     │
-  │     │   Payoff = max($80 - $105, 0) = max(-$25, 0) = $0   │
-  │     └─────────────────────────────────────────────────────┘
-  │
+```mermaid
+flowchart TB
+    ITM["ITM REGION (Call) — Price $130\nStock > Strike = Option has value\nPayoff = $130 − $105 = $25"]
+    STRIKE["═══ STRIKE K = $105 ═══"]
+    OTM["OTM REGION (Call) — Price $80\nStock < Strike = Option worthless\nPayoff = max($80 − $105, 0) = $0"]
+
+    ITM --- STRIKE --- OTM
+
+    style ITM fill:#d4edda,stroke:#155724
+    style STRIKE fill:#fff3cd,stroke:#856404
+    style OTM fill:#f8d7da,stroke:#842029
 ```
 
 | Region | Call Option | Put Option |
@@ -3268,27 +3041,16 @@ Monte Carlo simulation is used when:
 
 The idea is simple: simulate many possible futures, calculate what the option would pay in each future, and average the results:
 
-```text
-                          1000 simulated futures
-                                    │
-                                    ▼
-           ┌─────────────────────────────────────────────┐
-           │  Future 1: Stock ends at $120 → payoff $15  │
-           │  Future 2: Stock ends at $85  → payoff $0   │
-           │  Future 3: Stock ends at $142 → payoff $37  │
-           │  Future 4: Stock ends at $91  → payoff $0   │
-           │           ...                               │
-           │  Future 1000: Stock ends at $108 → payoff $3│
-           └─────────────────────────────────────────────┘
-                                    │
-                                    ▼
-                      Average payoff = $8.80
-                                    │
-                                    ▼
-                      Discount to today = $8.80 × e^(-rT)
-                                    │
-                                    ▼
-                      Option Price ≈ $8.38
+```mermaid
+flowchart TB
+    SIM["1000 Simulated Futures"]
+    SIM --> FUTURES["Future 1: Stock → $120, payoff $15\nFuture 2: Stock → $85, payoff $0\nFuture 3: Stock → $142, payoff $37\nFuture 4: Stock → $91, payoff $0\n...\nFuture 1000: Stock → $108, payoff $3"]
+    FUTURES --> AVG["Average payoff = $8.80"]
+    AVG --> DISC["Discount to today\n$8.80 × e⁻ʳᵀ"]
+    DISC --> PRICE["Option Price ≈ $8.38"]
+
+    style SIM fill:#4a90d9,stroke:#2a5a8a,color:#fff
+    style PRICE fill:#28a745,stroke:#1e7e34,color:#fff
 ```
 
 #### Geometric Brownian Motion (GBM)
@@ -3346,26 +3108,19 @@ This scales the random component Z ~ N(0,1) to match the stock's volatility.
 
 Putting it together for one time step:
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                     GBM Price Update                                   │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│   S_new = S_old × exp(drift + diffusion × Z)                           │
-│                                                                        │
-│   Where:                                                               │
-│     drift     = (r - σ²/2) × Δt          = 0.0006                      │
-│     diffusion = σ × √Δt                  = 0.0283                      │
-│     Z         = random normal ~ N(0,1)   = -0.65 (example)             │
-│                                                                        │
-│   Example calculation:                                                 │
-│     S_old = 100.00                                                     │
-│     exponent = 0.0006 + 0.0283 × (-0.65) = 0.0006 - 0.0184 = -0.0178   │
-│     S_new = 100.00 × exp(-0.0178) = 100.00 × 0.9823 = 98.23            │
-│                                                                        │
-│   Interpretation: Stock dropped 1.77% this step due to negative Z      │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph GBM["GBM Price Update"]
+        direction TB
+        FORMULA["S_new = S_old × exp(drift + diffusion × Z)"]
+        PARAMS["drift = (r - σ²/2) × Δt = 0.0006\ndiffusion = σ × √Δt = 0.0283\nZ = random normal ~ N(0,1) = -0.65 (example)"]
+        CALC["Example: S_old = 100.00\nexponent = 0.0006 + 0.0283 × (−0.65) = −0.0178\nS_new = 100.00 × exp(−0.0178) = 98.23"]
+        INTERP["Stock dropped 1.77% this step due to negative Z"]
+        FORMULA --> PARAMS --> CALC --> INTERP
+    end
+
+    style GBM fill:#f9f9f9,stroke:#333
+    style INTERP fill:#fff3cd,stroke:#856404
 ```
 
 The algorithm simulates stock price paths using Geometric Brownian Motion (GBM):
@@ -3426,38 +3181,25 @@ pub struct MonteCarloOutput {
 
 The Monte Carlo GPU kernel uses the same SoA (Structure of Arrays) layout as Black-Scholes for optimal memory coalescing:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 Monte Carlo GPU Architecture                │
-├─────────────────────────────────────────────────────────────┤
-│  CPU Side                    │  GPU Side                    │
-│  ──────────                  │  ────────                    │
-│  ┌─────────────────┐         │  ┌─────────────────────────┐ │
-│  │ MonteCarloInput │         │  │ SoA Buffers             │ │
-│  │ - stock_price   │ ───────►│  │ - stocks[]              │ │
-│  │ - strike_price  │         │  │ - strikes[]             │ │
-│  │ - time_to_expiry│         │  │ - times[]               │ │
-│  │ - risk_free_rate│         │  │ - rates[]               │ │
-│  │ - volatility    │         │  │ - vols[]                │ │
-│  │                 │         │  │ - seeds[]   (per-option)│ │
-│  └─────────────────┘         │  └───────────┬─────────────┘ │
-│                              │              │               │
-│                              │              ▼               │
-│                              │  ┌─────────────────────────┐ │
-│                              │  │  monte_carlo_kernel()   │ │
-│                              │  │  - xorshift32 RNG       │ │
-│                              │  │  - Box-Muller transform │ │
-│                              │  │  - GBM simulation       │ │
-│                              │  │  - Payoff calculation   │ │
-│                              │  └───────────┬─────────────┘ │
-│                              │              │               │
-│  ┌─────────────────┐         │              ▼               │
-│  │MonteCarloOutput │◄────────│  ┌─────────────────────────┐ │
-│  │ - call_price    │         │  │ Output Buffers          │ │
-│  │ - put_price     │         │  │ - call_prices[]         │ │
-│  └─────────────────┘         │  │ - put_prices[]          │ │
-│                              │  └─────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph CPU["CPU Side"]
+        INPUT["MonteCarloInput\n- stock_price\n- strike_price\n- time_to_expiry\n- risk_free_rate\n- volatility"]
+        OUTPUT["MonteCarloOutput\n- call_price\n- put_price"]
+    end
+
+    subgraph GPU["GPU Side"]
+        direction TB
+        SOA["SoA Buffers\nstocks[] | strikes[] | times[]\nrates[] | vols[] | seeds[]"]
+        SOA --> KERNEL["monte_carlo_kernel()\n- xorshift32 RNG\n- Box-Muller transform\n- GBM simulation\n- Payoff calculation"]
+        KERNEL --> OUTBUF["Output Buffers\ncall_prices[] | put_prices[]"]
+    end
+
+    INPUT -->|"copy to GPU"| SOA
+    OUTBUF -->|"read back"| OUTPUT
+
+    style CPU fill:#e8f4e8,stroke:#2d862d
+    style GPU fill:#e8eaf4,stroke:#2d4a86
 ```
 
 ### Deterministic Seeding
@@ -3773,17 +3515,14 @@ Both Z₁ and Z₂ are independent standard normal N(0, 1) random variables.
 
 **Why It Works (Visual Explanation):**
 
-```
-    Uniform [0,1)²              Polar Coordinates            Normal Distribution
-                                                             
-    ┌─────────────┐            ┌─────────────┐              ┌─────────────┐
-    │░░░░░░░░░░░░░│            │      r      │              │    ╱╲       │
-    │░░░░░░░░░░░░░│  ────────► │     ╱│      │  ──────────► │   ╱  ╲      │
-    │░░░░░░░░░░░░░│  Box-Muller│    ╱ │θ     │  projection  │  ╱    ╲     │
-    │░░░░░░░░░░░░░│            │   ●──┘      │              │ ╱      ╲    │
-    └─────────────┘            └─────────────┘              └─────────────┘
-         U₁, U₂                r = √(-2 ln U₁)              Z = r × cos(θ)
-                               θ = 2π U₂
+```mermaid
+flowchart LR
+    U["Uniform [0,1)²\nU₁, U₂"] -->|"Box-Muller"| P["Polar Coordinates\nr = √(-2 ln U₁)\nθ = 2π U₂"]
+    P -->|"projection"| N["Normal Distribution\nZ = r × cos(θ)\n~ N(0,1)"]
+
+    style U fill:#fff3cd,stroke:#856404
+    style P fill:#cce5ff,stroke:#004085
+    style N fill:#d4edda,stroke:#155724
 ```
 
 **Mathematical Derivation:**
@@ -3891,17 +3630,14 @@ Since we require **identical results on CPU and GPU** for validation, we use the
 
 #### Complete RNG Pipeline
 
-```text
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ deterministic   │     │    xorshift32   │     │   Box-Muller    │
-│    _seed()      │────►│                 │────►│    Transform    │
-│                 │     │ state ← mixing  │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        ▼                       ▼                       ▼
-   Unique seed           Uniform [0,1)            Normal N(0,1)
-   from input            random number            random number
-   parameters            (reproducible)           (for stock paths)
+```mermaid
+flowchart LR
+    SEED["deterministic_seed()\n→ Unique seed\nfrom input parameters"] --> XOR["xorshift32\nstate ← mixing\n→ Uniform [0,1)\nrandom number\n(reproducible)"]
+    XOR --> BM["Box-Muller\nTransform\n→ Normal N(0,1)\nrandom number\n(for stock paths)"]
+
+    style SEED fill:#fff3cd,stroke:#856404
+    style XOR fill:#cce5ff,stroke:#004085
+    style BM fill:#d4edda,stroke:#155724
 ```
 
 This pipeline ensures:
@@ -3917,20 +3653,17 @@ Monte Carlo option pricing is **embarrassingly parallel** at the option level. E
 
 ### Parallelization Model: One Thread Per Option
 
-```text
-┌────────────────────────────────────────────────────────────────┐
-│                         GPU PARALLELIZATION                    │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  Option 0 ──► Thread 0 ──► [1000 paths × 50 steps] ──► Price₀  │
-│  Option 1 ──► Thread 1 ──► [1000 paths × 50 steps] ──► Price₁  │
-│  Option 2 ──► Thread 2 ──► [1000 paths × 50 steps] ──► Price₂  │
-│     ...          ...              ...                    ...   │
-│  Option N ──► Thread N ──► [1000 paths × 50 steps] ──► PriceN  │
-│                                                                │
-│  ◄─────────────────── ALL IN PARALLEL ────────────────────►    │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph PAR["GPU Parallelization — ALL IN PARALLEL"]
+        direction TB
+        O0["Option 0"] --> T0["Thread 0"] --> W0["1000 paths × 50 steps"] --> P0["Price₀"]
+        O1["Option 1"] --> T1["Thread 1"] --> W1["1000 paths × 50 steps"] --> P1["Price₁"]
+        O2["Option 2"] --> T2["Thread 2"] --> W2["1000 paths × 50 steps"] --> P2["Price₂"]
+        ON["Option N"] --> TN["Thread N"] --> WN["1000 paths × 50 steps"] --> PN["PriceN"]
+    end
+
+    style PAR fill:#e8eaf4,stroke:#2d4a86
 ```
 
 Each GPU thread:
@@ -3977,82 +3710,69 @@ fn monte_carlo_kernel<F: Float>(
 
 ### GPU Execution Model
 
-```text
-                    GPU with 1000s of cores
-         ┌──────────────────────────────────────┐
-         │  ┌────┐┌────┐┌────┐┌────┐    ┌────┐  │
-         │  │ SM ││ SM ││ SM ││ SM │ ...│ SM │  │  SM = Streaming Multiprocessor
-         │  └────┘└────┘└────┘└────┘    └────┘  │
-         │     │     │     │     │         │    │
-         │     ▼     ▼     ▼     ▼         ▼    │
-         │  ┌────┐┌────┐┌────┐┌────┐    ┌────┐  │
-         │  │Warp││Warp││Warp││Warp│    │Warp│  │  Warp = 32 threads (NVIDIA)
-         │  │ 0  ││ 1  ││ 2  ││ 3  │ ...│ N  │  │         64 threads (AMD)
-         │  └────┘└────┘└────┘└────┘    └────┘  │
-         └──────────────────────────────────────┘
-                         │
-                         ▼
-    ┌───────────────────────────────────────────────────┐
-    │ 1 Million Options → distributed across all threads│
-    │                                                   │
-    │   Warp 0 (32 threads): Options 0-31               │
-    │   Warp 1 (32 threads): Options 32-63              │
-    │   Warp 2 (32 threads): Options 64-95              │
-    │   ...                                             │
-    │   Warp 31249: Options 999,968 - 999,999           │
-    └───────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph GPU_HW["GPU with 1000s of cores"]
+        direction LR
+        SM1["SM"] --> W0["Warp 0\n(32 threads)"]
+        SM2["SM"] --> W1["Warp 1\n(32 threads)"]
+        SM3["SM"] --> W2["Warp 2\n(32 threads)"]
+        SM4["SM"] --> W3["Warp 3\n(32 threads)"]
+        SMN["SM ..."] --> WN["Warp N\n(32 threads)"]
+    end
+
+    GPU_HW --> DIST["1 Million Options distributed across all threads\nWarp 0: Options 0–31\nWarp 1: Options 32–63\nWarp 2: Options 64–95\n...\nWarp 31249: Options 999,968–999,999"]
+
+    style GPU_HW fill:#e8eaf4,stroke:#2d4a86
+    style DIST fill:#f9f9f9,stroke:#333
 ```
+
+> **SM** = Streaming Multiprocessor | **Warp** = 32 threads (NVIDIA) / 64 threads (AMD)
 
 ### Data Layout: Structure of Arrays (SoA)
 
 For optimal GPU memory access, data is stored in **Structure of Arrays** format:
 
-```text
-Array of Structs (AoS) - ❌ Bad for GPU:
-┌──────────────────────────────────────────────────────┐
-│ Option0{stock,strike,time,rate,vol} │                │
-│ Option1{stock,strike,time,rate,vol} │                │
-│ Option2{stock,strike,time,rate,vol} │                │
-└──────────────────────────────────────────────────────┘
-  Problem: Adjacent threads access non-contiguous memory
+```mermaid
+flowchart TB
+    subgraph AOS["Array of Structs (AoS) — Bad for GPU"]
+        direction TB
+        A1["Option0 {stock, strike, time, rate, vol}"]
+        A2["Option1 {stock, strike, time, rate, vol}"]
+        A3["Option2 {stock, strike, time, rate, vol}"]
+        NOTE_AOS["Problem: Adjacent threads\naccess non-contiguous memory"]
+    end
 
-Structure of Arrays (SoA) - ✅ Good for GPU:
-┌─────────────────────────────────────────────────────┐
-│ stocks:  [100.0, 105.0, 98.0, 112.0, ...]           │
-│ strikes: [102.0, 108.0, 95.0, 115.0, ...]           │
-│ times:   [1.0,   0.5,   2.0,  1.5,   ...]           │
-│ rates:   [0.05,  0.05,  0.05, 0.05,  ...]           │
-│ vols:    [0.2,   0.25,  0.18, 0.3,   ...]           │
-│ seeds:   [0xA7.., 0xB3.., 0xC1.., ...]              │
-└─────────────────────────────────────────────────────┘
-  Benefit: Coalesced memory access, full bandwidth utilization
+    subgraph SOA["Structure of Arrays (SoA) — Good for GPU"]
+        direction TB
+        S1["stocks:  [100.0, 105.0, 98.0, 112.0, ...]"]
+        S2["strikes: [102.0, 108.0, 95.0, 115.0, ...]"]
+        S3["times:   [1.0,   0.5,   2.0,  1.5,   ...]"]
+        S4["rates:   [0.05,  0.05,  0.05, 0.05,  ...]"]
+        S5["vols:    [0.2,   0.25,  0.18, 0.3,   ...]"]
+        S6["seeds:   [0xA7.., 0xB3.., 0xC1.., ...]"]
+        NOTE_SOA["Benefit: Coalesced memory access,\nfull bandwidth utilization"]
+    end
+
+    style AOS fill:#f8d7da,stroke:#842029
+    style SOA fill:#d4edda,stroke:#155724
 ```
 
 ### Parallelization Hierarchy
 
-```text
-Level 1: OPTION LEVEL (GPU parallelism - thousands of threads)
-├── Thread 0 → Option 0
-├── Thread 1 → Option 1
-├── Thread 2 → Option 2
-│   ...
-└── Thread N → Option N
-    │
-    │
-    Level 2: PATH LEVEL (Sequential within each thread)
-    └── for path in 0..1000 {
-            │
-            │
-            Level 3: TIME STEP LEVEL (Sequential within each path)
-            └── for step in 0..50 {
-                    z = box_muller(seed)    // 2 RNG calls
-                    S *= exp(drift + diffusion * z)
-                }
-        }
+```mermaid
+flowchart TB
+    L1["Level 1: OPTION LEVEL\n(GPU parallelism — thousands of threads)\nThread 0 → Option 0\nThread 1 → Option 1\n...\nThread N → Option N"]
+    L1 --> L2["Level 2: PATH LEVEL\n(Sequential within each thread)\nfor path in 0..1000"]
+    L2 --> L3["Level 3: TIME STEP LEVEL\n(Sequential within each path)\nfor step in 0..50\nz = box_muller(seed) // 2 RNG calls\nS *= exp(drift + diffusion × z)"]
 
-Total work per thread: 1000 paths × 50 steps × 2 RNG = 100,000 RNG calls
-Total work for 1M options: 100 billion RNG operations (executed in parallel!)
+    style L1 fill:#e8eaf4,stroke:#2d4a86
+    style L2 fill:#fff3cd,stroke:#856404
+    style L3 fill:#d4edda,stroke:#155724
 ```
+
+> **Total work per thread:** 1000 paths × 50 steps × 2 RNG = 100,000 RNG calls
+> **Total work for 1M options:** 100 billion RNG operations (executed in parallel!)
 
 ### Performance Comparison
 
@@ -4066,53 +3786,52 @@ Total work for 1M options: 100 billion RNG operations (executed in parallel!)
 
 The Monte Carlo kernel uses **true double-buffering** to overlap GPU computation with data upload:
 
-```text
-Timeline (per flush call):
-─────────────────────────────────────────────────────────────────────────►
+```mermaid
+sequenceDiagram
+    participant CPU
+    participant GPU
 
-1. UPLOAD new batch (async) ─► Happens WHILE GPU computes previous batch!
-2. READ previous results     ─► Blocks until GPU done (upload already queued)
-3. LAUNCH new kernel         ─► Starts computing with uploaded data
+    Note over CPU,GPU: Per flush call (double-buffered)
+    CPU->>GPU: 1. UPLOAD new batch (async)
+    Note right of GPU: Happens WHILE GPU computes previous batch
+    CPU->>GPU: 2. READ previous results
+    Note right of GPU: Blocks until GPU done (upload already queued)
+    CPU->>GPU: 3. LAUNCH new kernel
+    Note right of GPU: Starts computing with uploaded data
 ```
 
-**Before (no overlap):**
-```text
-flush(): [READ prev] [UPLOAD new] [LAUNCH]
-GPU:     ────────────┘            └──────── GPU idle during upload!
-```
+**Before (no overlap):** `flush(): [READ prev] → [UPLOAD new] → [LAUNCH]` — GPU idle during upload
 
-**After (true double-buffering):**
-```text
-flush(): [UPLOAD new] [READ prev] [LAUNCH]
-GPU:     ──computing──────────────┘         Upload overlaps with compute!
-```
+**After (true double-buffering):** `flush(): [UPLOAD new] → [READ prev] → [LAUNCH]` — Upload overlaps with compute
 
 ### GPU Memory Copy Semantics
 
 Understanding how `client.create()` works is critical for safe buffer management:
 
-```text
-Before client.create():
-┌─────────────────────────┐     ┌─────────────────────────┐
-│  CPU Memory (Vec)       │     │  GPU Memory             │
-│  [100.0, 110.0, 95.0]   │     │  (empty)                │
-└─────────────────────────┘     └─────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph BEFORE["Before client.create()"]
+        direction LR
+        CPU1["CPU Memory (Vec)\n[100.0, 110.0, 95.0]"]
+        GPU1["GPU Memory\n(empty)"]
+    end
 
-During client.create():
-┌─────────────────────────┐     ┌─────────────────────────┐
-│  CPU Memory (Vec)       │────►│  GPU Memory (copy)      │
-│  [100.0, 110.0, 95.0]   │COPY │  [100.0, 110.0, 95.0]   │
-└─────────────────────────┘     └─────────────────────────┘
-                                          │
-                                    Handle (stock_h)
+    subgraph DURING["During client.create()"]
+        direction LR
+        CPU2["CPU Memory (Vec)\n[100.0, 110.0, 95.0]"] -->|"COPY"| GPU2["GPU Memory (copy)\n[100.0, 110.0, 95.0]\n→ Handle (stock_h)"]
+    end
 
-After buffer.clear():
-┌─────────────────────────┐     ┌─────────────────────────┐
-│  CPU Memory (Vec)       │     │  GPU Memory (still OK!) │
-│  [] (empty)             │     │  [100.0, 110.0, 95.0]   │
-└─────────────────────────┘     └─────────────────────────┘
-         ✓                               │
-    Clear is SAFE!              Handle still valid
+    subgraph AFTER["After buffer.clear()"]
+        direction LR
+        CPU3["CPU Memory (Vec)\n[] (empty)\n✓ Clear is SAFE!"]
+        GPU3["GPU Memory (still OK!)\n[100.0, 110.0, 95.0]\nHandle still valid"]
+    end
+
+    BEFORE --> DURING --> AFTER
+
+    style BEFORE fill:#f9f9f9,stroke:#333
+    style DURING fill:#fff3cd,stroke:#856404
+    style AFTER fill:#d4edda,stroke:#155724
 ```
 
 **Key Points:**
@@ -4125,14 +3844,14 @@ After buffer.clear():
 
 "Non-blocking" means the CPU doesn't wait for the GPU, but command ordering is preserved:
 
-```text
-Command Queue:
-┌──────────────┬───────────────┬──────────────┐
-│  Upload B1   │  Kernel B1    │  Upload B2   │  ...
-└──────────────┴───────────────┴──────────────┘
-       ↑               ↑
-       │               └── Kernel won't start until upload is done
-       └── Data already in staging buffer
+```mermaid
+flowchart LR
+    U1["Upload B1\n(data in staging buffer)"] --> K1["Kernel B1\n(won't start until\nupload is done)"] --> U2["Upload B2"] --> K2["Kernel B2\n..."]
+
+    style U1 fill:#cce5ff,stroke:#004085
+    style K1 fill:#fff3cd,stroke:#856404
+    style U2 fill:#cce5ff,stroke:#004085
+    style K2 fill:#fff3cd,stroke:#856404
 ```
 
 **GPU guarantees:**
@@ -4148,23 +3867,17 @@ This section traces the complete flow from input to output for GPU Monte Carlo p
 
 ### High-Level Flow
 
-```text
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ MonteCarloInput │────►│  SoA Buffers    │────►│   GPU Kernel    │
-│ (per option)    │     │ (batched)       │     │ (parallel)      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-  stock=100, K=105       stocks: [100, ...]      Thread 0-N process
-  time=1.0, r=0.05       seeds:  [0xBD, ...]     50,000 iterations
-  vol=0.2                                        each
-                                                         │
-                                                         ▼
-                               ┌─────────────────────────────────┐
-                               │          Output                 │
-                               │  call_prices: [8.38, 12.1, ...] │
-                               │  put_prices:  [8.26, 9.84, ...] │
-                               └─────────────────────────────────┘
+```mermaid
+flowchart LR
+    INPUT["MonteCarloInput\n(per option)\nstock=100, K=105\ntime=1.0, r=0.05\nvol=0.2"]
+    INPUT --> SOA["SoA Buffers\n(batched)\nstocks: [100, ...]\nseeds: [0xBD, ...]"]
+    SOA --> KERNEL["GPU Kernel\n(parallel)\nThread 0–N process\n50,000 iterations each"]
+    KERNEL --> OUT["Output\ncall_prices: [8.38, 12.1, ...]\nput_prices: [8.26, 9.84, ...]"]
+
+    style INPUT fill:#fff3cd,stroke:#856404
+    style SOA fill:#cce5ff,stroke:#004085
+    style KERNEL fill:#e8eaf4,stroke:#2d4a86
+    style OUT fill:#d4edda,stroke:#155724
 ```
 
 ### Step-by-Step Execution
@@ -4190,16 +3903,13 @@ let seed = deterministic_seed(&input);  // → 0xBDCB01ED
 
 **Step 3: Batch into SoA Buffers**
 
-```text
-Input stream: [Option₀, Option₁, Option₂, ..., Option₉₉₉₉₉]
-                    ↓
-SoA Buffers (for 100K batch):
-├── stocks:  [100.0, 105.0, 98.0, ...]
-├── strikes: [105.0, 110.0, 95.0, ...]
-├── times:   [1.0,   0.5,   2.0,  ...]
-├── rates:   [0.05,  0.05,  0.05, ...]
-├── vols:    [0.2,   0.25,  0.18, ...]
-└── seeds:   [0xBD.., 0x63.., 0x54.., ...]
+```mermaid
+flowchart TB
+    INPUT["Input stream\n[Option₀, Option₁, Option₂, ..., Option₉₉₉₉₉]"]
+    INPUT --> SOA["SoA Buffers (for 100K batch)\nstocks:  [100.0, 105.0, 98.0, ...]\nstrikes: [105.0, 110.0, 95.0, ...]\ntimes:   [1.0, 0.5, 2.0, ...]\nrates:   [0.05, 0.05, 0.05, ...]\nvols:    [0.2, 0.25, 0.18, ...]\nseeds:   [0xBD.., 0x63.., 0x54.., ...]"]
+
+    style INPUT fill:#fff3cd,stroke:#856404
+    style SOA fill:#cce5ff,stroke:#004085
 ```
 
 **Step 4: GPU Kernel Execution (Per Thread)**
@@ -4259,35 +3969,31 @@ From 20 sample paths: 5 ended ITM (above strike), 15 ended OTM (below strike).
 
 **Step 6: Results Copied Back**
 
-```text
-GPU Memory:                    CPU Memory:
-call_out: [8.32, 12.1, ...]   →   Vec<MonteCarloOutput>
-put_out:  [5.21, 9.84, ...]   →   [Output₀, Output₁, ...]
+```mermaid
+flowchart LR
+    GPU_MEM["GPU Memory\ncall_out: [8.32, 12.1, ...]\nput_out: [5.21, 9.84, ...]"] -->|"read back"| CPU_MEM["CPU Memory\nVec‹MonteCarloOutput›\n[Output₀, Output₁, ...]"]
+
+    style GPU_MEM fill:#e8eaf4,stroke:#2d4a86
+    style CPU_MEM fill:#e8f4e8,stroke:#2d862d
 ```
 
 ### Performance Summary
 
-```text
-┌───────────────────────────────────────────────────────────────────┐
-│                 MONTE CARLO GPU PERFORMANCE                       │
-├───────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  Input: 1 Million Options                                         │
-│  Work:  1M × 1000 paths × 50 steps × 2 RNG = 100 Billion ops      │
-│                                                                   │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐          │
-│  │   CPU Seq     │  │   CPU Par     │  │     GPU       │          │
-│  │   1 thread    │  │   8 threads   │  │  1000s cores  │          │
-│  │               │  │               │  │               │          │
-│  │   ~60 sec     │  │   ~8 sec      │  │   ~0.1 sec    │          │
-│  │               │  │               │  │               │          │
-│  │   1x          │  │   7.5x        │  │   600x        │          │
-│  └───────────────┘  └───────────────┘  └───────────────┘          │
-│                                                                   │
-│  GPU Throughput: ~600 GFLOPS                                      │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph PERF["Monte Carlo GPU Performance\n1M Options × 1000 paths × 50 steps × 2 RNG = 100B ops"]
+        direction LR
+        SEQ["CPU Sequential\n1 thread\n~60 sec\n1x"]
+        PAR["CPU Parallel\n8 threads\n~8 sec\n7.5x"]
+        GPU["GPU\n1000s cores\n~0.1 sec\n600x"]
+    end
+
+    style SEQ fill:#f8d7da,stroke:#842029
+    style PAR fill:#fff3cd,stroke:#856404
+    style GPU fill:#d4edda,stroke:#155724
 ```
+
+> **GPU Throughput:** ~600 GFLOPS
 
 ---
 
