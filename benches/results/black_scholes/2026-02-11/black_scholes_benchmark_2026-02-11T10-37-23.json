@@ -1,0 +1,288 @@
+{
+  "benchmark_type": "black_scholes",
+  "start_time": "2026-02-11T10:37:23.832172+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 12,
+    "ram_gb": 32.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M2 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 4,
+    "gpu_batch_size": 5000000,
+    "gpu_threads": 16384
+  },
+  "total_tests": 4,
+  "cpu_workers": 12,
+  "batch_size": 5000000,
+  "num_runs": 5,
+  "warmup_runs": 1,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-02-11T10:37:24.021434+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "renoir_seq_total_time_s": 0.0006839332,
+      "renoir_par_total_time_s": 0.00042406660000000006,
+      "gpu_total_time_s": 0.000818058,
+      "renoir_seq_stats": {
+        "mean": 0.0006839332,
+        "stddev": 0.000022663075976133492,
+        "min": 0.000662833,
+        "max": 0.000721958,
+        "median": 0.000676833,
+        "runs": [
+          0.000721958,
+          0.000684708,
+          0.000673334,
+          0.000676833,
+          0.000662833
+        ],
+        "num_runs": 5
+      },
+      "renoir_par_stats": {
+        "mean": 0.00042406660000000006,
+        "stddev": 0.000020982590933914713,
+        "min": 0.000396375,
+        "max": 0.000453417,
+        "median": 0.000422208,
+        "runs": [
+          0.000422208,
+          0.000416125,
+          0.000432208,
+          0.000453417,
+          0.000396375
+        ],
+        "num_runs": 5
+      },
+      "gpu_stats": {
+        "mean": 0.000818058,
+        "stddev": 0.00006576751652221634,
+        "min": 0.000732791,
+        "max": 0.000917084,
+        "median": 0.000815291,
+        "runs": [
+          0.000917084,
+          0.000815291,
+          0.000803708,
+          0.000821416,
+          0.000732791
+        ],
+        "num_runs": 5
+      },
+      "speedup": 0.8360448770136103,
+      "speedup_parallel": 0.518382070708923,
+      "renoir_seq_gflops": 0.5848524388054271,
+      "renoir_par_gflops": 0.9432480652803119,
+      "gpu_gflops": 0.48896288527219345,
+      "cpu_workers": 12,
+      "batch_size": 5000000,
+      "num_runs": 5,
+      "validation_passed": true,
+      "validation_max_error": 0.000036716461181640625,
+      "validation_avg_error": 3.5834211757901357e-6,
+      "validation_sample_size": 10000
+    },
+    {
+      "test_id": 2,
+      "timestamp": "2026-02-11T10:37:24.068009+00:00",
+      "items_count": 25000,
+      "data_size_gb": 0.00046566128730773926,
+      "renoir_seq_total_time_s": 0.0014394916,
+      "renoir_par_total_time_s": 0.0005283667999999999,
+      "gpu_total_time_s": 0.0013460336,
+      "renoir_seq_stats": {
+        "mean": 0.0014394916,
+        "stddev": 0.000025146851588220713,
+        "min": 0.001420541,
+        "max": 0.001482792,
+        "median": 0.001433291,
+        "runs": [
+          0.001433291,
+          0.001420541,
+          0.001423625,
+          0.001482792,
+          0.001437209
+        ],
+        "num_runs": 5
+      },
+      "renoir_par_stats": {
+        "mean": 0.0005283667999999999,
+        "stddev": 0.00003723158478630743,
+        "min": 0.00048175,
+        "max": 0.000582042,
+        "median": 0.000532375,
+        "runs": [
+          0.000582042,
+          0.000537209,
+          0.000532375,
+          0.000508458,
+          0.00048175
+        ],
+        "num_runs": 5
+      },
+      "gpu_stats": {
+        "mean": 0.0013460336,
+        "stddev": 0.00011057790035671686,
+        "min": 0.001170834,
+        "max": 0.001457625,
+        "median": 0.0013905,
+        "runs": [
+          0.001313167,
+          0.001398042,
+          0.001170834,
+          0.001457625,
+          0.0013905
+        ],
+        "num_runs": 5
+      },
+      "speedup": 1.0694321449330835,
+      "speedup_parallel": 0.39253611499742647,
+      "renoir_seq_gflops": 0.6946897085054197,
+      "renoir_par_gflops": 1.8926245933696064,
+      "gpu_gflops": 0.7429235050298894,
+      "cpu_workers": 12,
+      "batch_size": 5000000,
+      "num_runs": 5,
+      "validation_passed": true,
+      "validation_max_error": 0.000036716461181640625,
+      "validation_avg_error": 3.5834211757901357e-6,
+      "validation_sample_size": 10000
+    },
+    {
+      "test_id": 3,
+      "timestamp": "2026-02-11T10:37:24.089171+00:00",
+      "items_count": 50231,
+      "data_size_gb": 0.000935625284910202,
+      "renoir_seq_total_time_s": 0.0029377334,
+      "renoir_par_total_time_s": 0.000829308,
+      "gpu_total_time_s": 0.0020468832,
+      "renoir_seq_stats": {
+        "mean": 0.0029377334,
+        "stddev": 0.00012182401359255906,
+        "min": 0.002791208,
+        "max": 0.003066334,
+        "median": 0.002971083,
+        "runs": [
+          0.002791208,
+          0.002829708,
+          0.002971083,
+          0.003066334,
+          0.003030334
+        ],
+        "num_runs": 5
+      },
+      "renoir_par_stats": {
+        "mean": 0.000829308,
+        "stddev": 0.00003794483669750077,
+        "min": 0.000794833,
+        "max": 0.000893083,
+        "median": 0.000818666,
+        "runs": [
+          0.000893083,
+          0.000818666,
+          0.000830375,
+          0.000809583,
+          0.000794833
+        ],
+        "num_runs": 5
+      },
+      "gpu_stats": {
+        "mean": 0.0020468832,
+        "stddev": 0.00004583823689017725,
+        "min": 0.001979875,
+        "max": 0.002095875,
+        "median": 0.00206725,
+        "runs": [
+          0.00206725,
+          0.001979875,
+          0.002095875,
+          0.002069125,
+          0.002022291
+        ],
+        "num_runs": 5
+      },
+      "speedup": 1.4352227816418641,
+      "speedup_parallel": 0.40515648377005586,
+      "renoir_seq_gflops": 0.6839422528946977,
+      "renoir_par_gflops": 2.422791049887376,
+      "gpu_gflops": 0.9816095026819313,
+      "cpu_workers": 12,
+      "batch_size": 5000000,
+      "num_runs": 5,
+      "validation_passed": true,
+      "validation_max_error": 0.000036716461181640625,
+      "validation_avg_error": 3.5834211757901357e-6,
+      "validation_sample_size": 10000
+    },
+    {
+      "test_id": 4,
+      "timestamp": "2026-02-11T10:37:24.125530+00:00",
+      "items_count": 75254,
+      "data_size_gb": 0.0014017149806022644,
+      "renoir_seq_total_time_s": 0.0044663416,
+      "renoir_par_total_time_s": 0.0010956334,
+      "gpu_total_time_s": 0.0029627918,
+      "renoir_seq_stats": {
+        "mean": 0.0044663416,
+        "stddev": 0.00015242726982006853,
+        "min": 0.004209125,
+        "max": 0.004614583,
+        "median": 0.004496083,
+        "runs": [
+          0.004209125,
+          0.00448625,
+          0.004525667,
+          0.004614583,
+          0.004496083
+        ],
+        "num_runs": 5
+      },
+      "renoir_par_stats": {
+        "mean": 0.0010956334,
+        "stddev": 0.0000240859797870047,
+        "min": 0.001070875,
+        "max": 0.001129625,
+        "median": 0.001098667,
+        "runs": [
+          0.001098667,
+          0.001070875,
+          0.001104792,
+          0.001129625,
+          0.001074208
+        ],
+        "num_runs": 5
+      },
+      "gpu_stats": {
+        "mean": 0.0029627918,
+        "stddev": 0.00005721010910407347,
+        "min": 0.002913292,
+        "max": 0.003056583,
+        "median": 0.002937291,
+        "runs": [
+          0.002975959,
+          0.002930834,
+          0.003056583,
+          0.002937291,
+          0.002913292
+        ],
+        "num_runs": 5
+      },
+      "speedup": 1.5074773731991562,
+      "speedup_parallel": 0.36979763478486743,
+      "renoir_seq_gflops": 0.6739654665017114,
+      "renoir_par_gflops": 2.7474153307118967,
+      "gpu_gflops": 1.0159876910689438,
+      "cpu_workers": 12,
+      "batch_size": 5000000,
+      "num_runs": 5,
+      "validation_passed": true,
+      "validation_max_error": 0.000036716461181640625,
+      "validation_avg_error": 3.5834211757901357e-6,
+      "validation_sample_size": 10000
+    }
+  ]
+}
