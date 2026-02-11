@@ -1,0 +1,86 @@
+{
+  "benchmark_type": "monte_carlo",
+  "start_time": "2026-02-11T10:11:50.256645+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 11,
+    "ram_gb": 18.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M3 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 1,
+    "gpu_batch_size": 100000,
+    "gpu_threads": 16384
+  },
+  "total_tests": 1,
+  "cpu_workers": 11,
+  "batch_size": 100000,
+  "num_runs": 2,
+  "warmup_runs": 1,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-02-11T10:12:04.719375+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "renoir_seq_total_time_s": 4.245460687,
+      "renoir_par_total_time_s": 0.6072336665,
+      "gpu_total_time_s": 0.009934521,
+      "renoir_seq_stats": {
+        "mean": 4.245460687,
+        "stddev": 0.32259416409106767,
+        "min": 4.017352166,
+        "max": 4.473569208,
+        "median": 4.245460687,
+        "runs": [
+          4.473569208,
+          4.017352166
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.6072336665,
+        "stddev": 0.005363523022132424,
+        "min": 0.603441083,
+        "max": 0.61102625,
+        "median": 0.6072336665,
+        "runs": [
+          0.603441083,
+          0.61102625
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.009934521,
+        "stddev": 0.0013268561764117474,
+        "min": 0.008996292,
+        "max": 0.01087275,
+        "median": 0.009934521,
+        "runs": [
+          0.01087275,
+          0.008996292
+        ],
+        "num_runs": 2
+      },
+      "speedup": 427.3442762866976,
+      "speedup_parallel": 61.12359785640395,
+      "renoir_seq_gflops": 2.3554569779955665,
+      "renoir_par_gflops": 16.46812512494315,
+      "gpu_gflops": 1006.5910575859672,
+      "cpu_workers": 11,
+      "batch_size": 100000,
+      "num_runs": 2,
+      "validation_passed": true,
+      "validation_max_error": 0.000030517578125,
+      "validation_avg_error": 4.039078776258975e-6,
+      "validation_sample_size": 1000
+    }
+  ],
+  "monte_carlo_config": {
+    "num_paths": 1000,
+    "time_steps": 50,
+    "flops_per_option": 1000000.0
+  }
+}

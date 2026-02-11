@@ -39,10 +39,10 @@ use rand::SeedableRng;
 
 mod common;
 use common::{
-    format_number, format_number_short, format_duration, format_speedup,
-    get_benchmark_filepath, get_benchmark_test_sizes,
-    get_platform_info, run_plotter, save_json, BenchmarkType,
-    TestResult, BenchmarkReport,
+    compute_stats, format_duration_with_stddev, format_number, format_number_short,
+    format_speedup, get_benchmark_filepath, get_benchmark_test_sizes, get_platform_info,
+    parse_num_runs_env, run_plotter, save_json, BenchmarkType, BenchmarkReport, TestResult,
+    WARMUP_RUNS,
 };
 
 // Import only the black_scholes kernel from examples (not the entire kernels' module)
@@ -219,6 +219,7 @@ fn main() {
     let num_workers = std::thread::available_parallelism()
         .map(|p| p.get())
         .unwrap_or(4);
+    let num_runs = parse_num_runs_env();
 
     // Print header banner
     print!(
@@ -229,6 +230,7 @@ fn main() {
                 &format!("Platform:       {}", get_platform_info()),
                 &format!("Workers:        {}", num_workers),
                 &format!("GPU Batch Size: {}", format_number(GPU_BATCH_SIZE)),
+                &format!("Runs/Test:      {} (+ {} warmup)", num_runs, WARMUP_RUNS),
                 &format!(
                     "Test Sizes:     {} sizes from {} to {}",
                     test_sizes.len(),
@@ -246,14 +248,14 @@ fn main() {
     let system_config = common::SystemConfig::detect(kernel.vectorization_factor, GPU_BATCH_SIZE);
     let json_path = get_benchmark_filepath(BenchmarkType::BlackScholes, &timestamp);
 
-    // Create table with timing and speedup columns
+    // Create table with timing (mean±stddev) and speedup columns
     let mut table = Table::new(&[
         ("Test", 6),
         ("Items", 14),
-        ("DataGen", 10),
-        ("Seq", 10),
-        ("Par", 10),
-        ("GPU", 10),
+        ("Runs", 6),
+        ("Seq (mean±σ)", 16),
+        ("Par (mean±σ)", 16),
+        ("GPU (mean±σ)", 16),
         ("Seq/GPU", 8),
         ("Par/GPU", 8),
         ("Valid", 9),
@@ -264,53 +266,83 @@ fn main() {
         let test_id = i + 1;
         let test_timestamp = Utc::now();
 
-        // Start a new row - displays empty cells immediately
+        // Start a new row
         table.start_row();
         table.set_cell(0, &format!("{:>4}", test_id));
         table.set_cell(1, &format!("{:>12}", format_number(num_options)));
+        table.set_cell(2, &format!("{:>4}", num_runs));
 
-        // Generate data (timed) - update cell when done
-        let data_gen_start = Instant::now();
+        // Generate data once (shared across all runs)
         let data = generate_options(num_options, BENCHMARK_SEED);
-        let data_gen_time = data_gen_start.elapsed().as_secs_f64();
-        table.set_cell(2, &format_duration(data_gen_time));
 
-        // Run CPU sequential benchmark - update cell when done
-        let cpu_seq = benchmark_cpu_sequential(&data);
-        table.set_cell(3, &format_duration(cpu_seq.duration_s));
+        // --- Multi-run CPU Sequential ---
+        let mut seq_durations = Vec::with_capacity(num_runs);
+        let mut last_cpu_seq = benchmark_cpu_sequential(&data); // first run = warmup
+        for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+            last_cpu_seq = benchmark_cpu_sequential(&data);
+        }
+        for _ in 0..num_runs {
+            let result = benchmark_cpu_sequential(&data);
+            seq_durations.push(result.duration_s);
+            last_cpu_seq = result;
+        }
+        let seq_stats = compute_stats(&seq_durations);
+        table.set_cell(3, &format_duration_with_stddev(seq_stats.mean, seq_stats.stddev));
 
-        // Run CPU parallel benchmark - update cell when done
-        let cpu_par = benchmark_cpu_parallel(&data, num_workers);
-        table.set_cell(4, &format_duration(cpu_par.duration_s));
+        // --- Multi-run CPU Parallel ---
+        let mut par_durations = Vec::with_capacity(num_runs);
+        let mut last_cpu_par = benchmark_cpu_parallel(&data, num_workers);
+        for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+            last_cpu_par = benchmark_cpu_parallel(&data, num_workers);
+        }
+        for _ in 0..num_runs {
+            let result = benchmark_cpu_parallel(&data, num_workers);
+            par_durations.push(result.duration_s);
+            last_cpu_par = result;
+        }
+        let par_stats = compute_stats(&par_durations);
+        table.set_cell(4, &format_duration_with_stddev(par_stats.mean, par_stats.stddev));
 
-        // Run GPU benchmark - update cell when done
+        // --- Multi-run GPU ---
         #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
-        let gpu = benchmark_gpu(&data);
+        let (gpu_stats, last_gpu) = {
+            let mut gpu_durations = Vec::with_capacity(num_runs);
+            let mut last = benchmark_gpu(&data); // warmup
+            for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+                last = benchmark_gpu(&data);
+            }
+            for _ in 0..num_runs {
+                let result = benchmark_gpu(&data);
+                gpu_durations.push(result.duration_s);
+                last = result;
+            }
+            (compute_stats(&gpu_durations), last)
+        };
 
         #[cfg(not(any(feature = "gpu-wgpu", feature = "gpu-cuda")))]
-        let gpu = TimingResult { duration_s: f64::MAX, output_count: 0, results: Vec::new() };
-        table.set_cell(5, &format_duration(gpu.duration_s));
+        let (gpu_stats, last_gpu) = (
+            compute_stats(&[f64::MAX]),
+            TimingResult { duration_s: f64::MAX, output_count: 0, results: Vec::new() },
+        );
+        table.set_cell(5, &format_duration_with_stddev(gpu_stats.mean, gpu_stats.stddev));
 
-        // Calculate speedups and update remaining cells
-        let speedup = cpu_seq.duration_s / gpu.duration_s;
-        let speedup_parallel = cpu_par.duration_s / gpu.duration_s;
+        // Calculate speedups from mean times
+        let speedup = seq_stats.mean / gpu_stats.mean;
+        let speedup_parallel = par_stats.mean / gpu_stats.mean;
         table.set_cell(6, &format_speedup(speedup));
         table.set_cell(7, &format_speedup(speedup_parallel));
 
-        // Calculate GFLOPS
-        let cpu_gflops = calculate_gflops(num_options, cpu_seq.duration_s);
-        let renoir_gflops = calculate_gflops(num_options, cpu_par.duration_s);
-        let gpu_gflops = calculate_gflops(num_options, gpu.duration_s);
+        // Calculate GFLOPS from mean times
+        let cpu_gflops = calculate_gflops(num_options, seq_stats.mean);
+        let renoir_gflops = calculate_gflops(num_options, par_stats.mean);
+        let gpu_gflops = calculate_gflops(num_options, gpu_stats.mean);
 
-        // Compute validation metrics using existing outputs
-        let validation_sample_size = cpu_seq.results.len().min(gpu.results.len()).min(10_000);
+        // Compute validation metrics using outputs from last run
+        let validation_sample_size = last_cpu_seq.results.len().min(last_gpu.results.len()).min(10_000);
         let (validation_numerical_ok, validation_max_error, validation_avg_error) = if validation_sample_size > 0 {
-            // Compare GPU outputs to CPU sequential outputs
-            // We use a subset for efficiency
-            let cpu_subset: Vec<_> = cpu_seq.results.iter().take(validation_sample_size).cloned().collect();
-            let gpu_subset: Vec<_> = gpu.results.iter().take(validation_sample_size).cloned().collect();
+            let cpu_subset: Vec<_> = last_cpu_seq.results.iter().take(validation_sample_size).cloned().collect();
+            let gpu_subset: Vec<_> = last_gpu.results.iter().take(validation_sample_size).cloned().collect();
             
-            // Compare directly between CPU and GPU outputs
             let tolerance = 1e-4f32;
             let mut max_error = 0.0f32;
             let mut total_error = 0.0f32;
@@ -338,9 +370,9 @@ fn main() {
         };
         
         let validation_passed = {
-            let count_ok = cpu_seq.output_count == num_options 
-                && cpu_par.output_count == num_options 
-                && gpu.output_count == num_options;
+            let count_ok = last_cpu_seq.output_count == num_options 
+                && last_cpu_par.output_count == num_options 
+                && last_gpu.output_count == num_options;
             count_ok && validation_numerical_ok
         };
         
@@ -350,16 +382,20 @@ fn main() {
         // Finalize the row
         table.flush_row();
         
-        // Now create the result with computed validation
+        // Create the result with statistics
         let result = TestResult {
             test_id,
             timestamp: test_timestamp.to_rfc3339(),
             items_count: num_options,
             data_size_gb: calculate_data_size_gb(num_options),
             
-            renoir_seq_total_time_s: cpu_seq.duration_s,
-            renoir_par_total_time_s: cpu_par.duration_s,
-            gpu_total_time_s: gpu.duration_s,
+            renoir_seq_total_time_s: seq_stats.mean,
+            renoir_par_total_time_s: par_stats.mean,
+            gpu_total_time_s: gpu_stats.mean,
+            
+            renoir_seq_stats: Some(seq_stats),
+            renoir_par_stats: Some(par_stats),
+            gpu_stats: Some(gpu_stats),
             
             cpu_seq_compute_s: None,
             cpu_par_compute_s: None,
@@ -376,6 +412,7 @@ fn main() {
             
             cpu_workers: num_workers,
             batch_size: GPU_BATCH_SIZE,
+            num_runs,
             
             validation_passed,
             validation_max_error: validation_max_error as f64,
@@ -394,6 +431,8 @@ fn main() {
             total_tests: test_sizes.len(),
             cpu_workers: num_workers,
             batch_size: GPU_BATCH_SIZE,
+            num_runs,
+            warmup_runs: WARMUP_RUNS,
             results: all_results.clone(),
             monte_carlo_config: None,
         };
@@ -402,7 +441,6 @@ fn main() {
 
     table.finish();
 
-    
     let report = BenchmarkReport {
         benchmark_type: "black_scholes".to_string(),
         start_time: timestamp.to_rfc3339(),
@@ -411,6 +449,8 @@ fn main() {
         total_tests: all_results.len(),
         cpu_workers: num_workers,
         batch_size: GPU_BATCH_SIZE,
+        num_runs,
+        warmup_runs: WARMUP_RUNS,
         results: all_results.clone(),
         monte_carlo_config: None,
     };

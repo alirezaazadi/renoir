@@ -136,6 +136,12 @@ def build_config_description(results, metadata):
     # Monte Carlo specific
     parts.append(f"MC: {num_paths} paths \u00d7 {time_steps} steps")
 
+    # Multi-run info
+    num_runs = metadata.get("num_runs", 1)
+    warmup_runs = metadata.get("warmup_runs", 0)
+    if num_runs > 1 or warmup_runs > 0:
+        parts.append(f"Runs: {num_runs} (+{warmup_runs} warmup)")
+
     # Benchmark load
     parts.append(f"Sizes: {format_number(min_items)}\u2013{format_number(max_items)}")
     parts.append(f"Tests: {len(results)}")
@@ -169,10 +175,23 @@ def plot_monte_carlo_results(results, metadata, source_name: str, output_dir: Pa
     par_gflops = [get_field(r, "renoir_par_gflops", "renoir_gflops") for r in results]
     
     validation_passed = [r.get("validation_passed", False) for r in results]
+
+    # Extract stddev from RunStats if available
+    def get_stddev(r, stats_field):
+        stats = r.get(stats_field)
+        if stats and isinstance(stats, dict):
+            return stats.get("stddev", 0)
+        return 0
+
+    cpu_stddevs = [get_stddev(r, "renoir_seq_stats") for r in results]
+    par_stddevs = [get_stddev(r, "renoir_par_stats") for r in results]
+    gpu_stddevs = [get_stddev(r, "gpu_stats") for r in results]
+    has_errorbars = any(s > 0 for s in cpu_stddevs + par_stddevs + gpu_stddevs)
     
     plt.style.use("seaborn-v0_8-darkgrid")
     fig = plt.figure(figsize=(16, 10))
     
+    num_runs = metadata.get("num_runs", 1)
     fig.suptitle(
         f"Monte Carlo CPU vs GPU Benchmark\n{metadata.get('platform', 'Unknown Platform')}",
         fontsize=14,
@@ -181,13 +200,21 @@ def plot_monte_carlo_results(results, metadata, source_name: str, output_dir: Pa
 
     # Chart 1: Execution Time Comparison (Log-Log)
     ax1 = plt.subplot(2, 3, 1)
-    ax1.loglog(items_counts, cpu_times, "o-", label="CPU Sequential", color="tab:blue", markersize=6, linewidth=2)
-    ax1.loglog(items_counts, par_times, "s-", label="CPU Parallel", color="tab:green", markersize=6, linewidth=2)
-    ax1.loglog(items_counts, gpu_times, "^-", label="GPU", color="tab:red", markersize=6, linewidth=2)
+    if has_errorbars:
+        ax1.errorbar(items_counts, cpu_times, yerr=cpu_stddevs, fmt="o-", label="CPU Sequential", color="tab:blue", markersize=6, linewidth=2, capsize=3, capthick=1)
+        ax1.errorbar(items_counts, par_times, yerr=par_stddevs, fmt="s-", label="CPU Parallel", color="tab:green", markersize=6, linewidth=2, capsize=3, capthick=1)
+        ax1.errorbar(items_counts, gpu_times, yerr=gpu_stddevs, fmt="^-", label="GPU", color="tab:red", markersize=6, linewidth=2, capsize=3, capthick=1)
+    else:
+        ax1.loglog(items_counts, cpu_times, "o-", label="CPU Sequential", color="tab:blue", markersize=6, linewidth=2)
+        ax1.loglog(items_counts, par_times, "s-", label="CPU Parallel", color="tab:green", markersize=6, linewidth=2)
+        ax1.loglog(items_counts, gpu_times, "^-", label="GPU", color="tab:red", markersize=6, linewidth=2)
+    ax1.set_xscale("log")
+    ax1.set_yscale("log")
     ax1.set_xlabel("Number of Options")
     ax1.set_ylabel("Time (s)")
     ax1.legend(loc="upper left")
-    ax1.set_title("Execution Time (Log Scale)", fontweight="bold")
+    title_suffix = f" (mean±σ, n={num_runs})" if num_runs > 1 else ""
+    ax1.set_title(f"Execution Time (Log Scale){title_suffix}", fontweight="bold")
     ax1.grid(True, alpha=0.3, which="both")
 
     # Chart 2: GPU Speedup vs Problem Size

@@ -1,0 +1,23 @@
+{
+  "benchmark_type": "black_scholes",
+  "start_time": "2026-02-11T10:09:43.060158+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 11,
+    "ram_gb": 18.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M3 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 4,
+    "gpu_batch_size": 5000000,
+    "gpu_threads": 16384
+  },
+  "total_tests": 0,
+  "cpu_workers": 11,
+  "batch_size": 5000000,
+  "num_runs": 2,
+  "warmup_runs": 1,
+  "results": []
+}

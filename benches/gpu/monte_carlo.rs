@@ -34,9 +34,10 @@ use chrono::Utc;
 
 mod common;
 use common::{
-    format_duration, format_number, format_number_short, format_speedup,
-    get_benchmark_filepath, get_benchmark_test_sizes, get_platform_info, run_plotter, save_json,
-    BenchmarkReport, BenchmarkType, MonteCarloConfig, SystemConfig, TestResult,
+    compute_stats, format_duration_with_stddev, format_number, format_number_short,
+    format_speedup, get_benchmark_filepath, get_benchmark_test_sizes, get_platform_info,
+    parse_num_runs_env, run_plotter, save_json, BenchmarkReport, BenchmarkType, MonteCarloConfig,
+    SystemConfig, TestResult, WARMUP_RUNS,
 };
 
 
@@ -263,22 +264,24 @@ fn main() {
         .collect();
     
     let workers = std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4);
+    let num_runs = parse_num_runs_env();
 
     print!("{}", create_banner("Monte Carlo Benchmark", &[
         &format!("Paths/Option: {}", format_number(MC_NUM_PATHS as usize)),
         &format!("Steps/Path:   {}", format_number(MC_TIME_STEPS as usize)),
         &format!("Workers:      {}", workers),
+        &format!("Runs/Test:    {} (+ {} warmup)", num_runs, WARMUP_RUNS),
         &format!("Validation:   {} samples, {:.0}% tol", VALIDATION_SAMPLE_SIZE, VALIDATION_TOLERANCE * 100.0),
     ]));
 
-    // Create table with timing and speedup columns
+    // Create table with timing (mean±stddev) and speedup columns
     let mut table = Table::new(&[
         ("Test", 6),
         ("Items", 14),
-        ("DataGen", 10),
-        ("Seq", 10),
-        ("Par", 10),
-        ("GPU", 10),
+        ("Runs", 6),
+        ("Seq (mean±σ)", 16),
+        ("Par (mean±σ)", 16),
+        ("GPU (mean±σ)", 16),
         ("Seq/GPU", 8),
         ("Par/GPU", 8),
         ("Valid", 9),
@@ -292,44 +295,74 @@ fn main() {
         std::fs::create_dir_all(parent).ok();
     }
 
-
     for (idx, &size) in sizes.iter().enumerate() {
-        // Start a new row - displays empty cells immediately
+        // Start a new row
         table.start_row();
         table.set_cell(0, &format!("{:>4}", idx + 1));
         table.set_cell(1, &format!("{:>12}", format_number(size)));
+        table.set_cell(2, &format!("{:>4}", num_runs));
         
-        // Generate data (timed) - update cell when done
-        let data_gen_start = Instant::now();
+        // Generate data once (shared across all runs)
         let data = generate_data(size);
-        let data_gen_time = data_gen_start.elapsed().as_secs_f64();
-        table.set_cell(2, &format_duration(data_gen_time));
-        
         let data_size_gb = (size * size_of::<MonteCarloInput>()) as f64 / (1024.0 * 1024.0 * 1024.0);
         
-        // Run CPU sequential benchmark - update cell when done
-        let cpu_seq = benchmark_cpu_seq(&data);
-        table.set_cell(3, &format_duration(cpu_seq.duration_s));
+        // --- Multi-run CPU Sequential ---
+        let mut seq_durations = Vec::with_capacity(num_runs);
+        let mut last_cpu_seq = benchmark_cpu_seq(&data); // warmup
+        for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+            last_cpu_seq = benchmark_cpu_seq(&data);
+        }
+        for _ in 0..num_runs {
+            let result = benchmark_cpu_seq(&data);
+            seq_durations.push(result.duration_s);
+            last_cpu_seq = result;
+        }
+        let seq_stats = compute_stats(&seq_durations);
+        table.set_cell(3, &format_duration_with_stddev(seq_stats.mean, seq_stats.stddev));
         
-        // Run CPU parallel benchmark - update cell when done
-        let cpu_par = benchmark_cpu_par(&data, workers);
-        table.set_cell(4, &format_duration(cpu_par.duration_s));
+        // --- Multi-run CPU Parallel ---
+        let mut par_durations = Vec::with_capacity(num_runs);
+        let _ = benchmark_cpu_par(&data, workers); // warmup
+        for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+            let _ = benchmark_cpu_par(&data, workers);
+        }
+        for _ in 0..num_runs {
+            let result = benchmark_cpu_par(&data, workers);
+            par_durations.push(result.duration_s);
+        }
+        let par_stats = compute_stats(&par_durations);
+        table.set_cell(4, &format_duration_with_stddev(par_stats.mean, par_stats.stddev));
         
-        // Run GPU benchmark - update cell when done
+        // --- Multi-run GPU ---
         #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
-        let gpu = benchmark_gpu(&data);
+        let (gpu_stats_computed, last_gpu) = {
+            let mut gpu_durations = Vec::with_capacity(num_runs);
+            let mut last = benchmark_gpu(&data); // warmup
+            for _ in 0..WARMUP_RUNS.saturating_sub(1) {
+                last = benchmark_gpu(&data);
+            }
+            for _ in 0..num_runs {
+                let result = benchmark_gpu(&data);
+                gpu_durations.push(result.duration_s);
+                last = result;
+            }
+            (compute_stats(&gpu_durations), last)
+        };
         #[cfg(not(any(feature = "gpu-wgpu", feature = "gpu-cuda")))]
-        let gpu = BenchResult { duration_s: 999.9, results: vec![] };
-        table.set_cell(5, &format_duration(gpu.duration_s));
+        let (gpu_stats_computed, last_gpu) = (
+            compute_stats(&[999.9]),
+            BenchResult { duration_s: 999.9, results: vec![] },
+        );
+        table.set_cell(5, &format_duration_with_stddev(gpu_stats_computed.mean, gpu_stats_computed.stddev));
 
-        // Validate GPU results against CPU
+        // Validate GPU results against CPU (using last run's outputs)
         let (valid_passed, max_err, avg_err, valid_n) = validate_results(
-            &cpu_seq.results, &gpu.results, VALIDATION_SAMPLE_SIZE
+            &last_cpu_seq.results, &last_gpu.results, VALIDATION_SAMPLE_SIZE
         );
 
-        // Calculate speedups and update remaining cells
-        let speedup_seq = cpu_seq.duration_s / gpu.duration_s;
-        let speedup_par = cpu_par.duration_s / gpu.duration_s;
+        // Calculate speedups from mean times
+        let speedup_seq = seq_stats.mean / gpu_stats_computed.mean;
+        let speedup_par = par_stats.mean / gpu_stats_computed.mean;
         table.set_cell(6, &format_speedup(speedup_seq));
         table.set_cell(7, &format_speedup(speedup_par));
         
@@ -349,9 +382,15 @@ fn main() {
             timestamp: Utc::now().to_rfc3339(),
             items_count: size,
             data_size_gb,
-            renoir_seq_total_time_s: cpu_seq.duration_s,
-            renoir_par_total_time_s: cpu_par.duration_s,
-            gpu_total_time_s: gpu.duration_s,
+            renoir_seq_total_time_s: seq_stats.mean,
+            renoir_par_total_time_s: par_stats.mean,
+            gpu_total_time_s: gpu_stats_computed.mean,
+            renoir_seq_gflops: (size as f64 * FLOPS_PER_OPTION) / seq_stats.mean / 1e9,
+            renoir_par_gflops: (size as f64 * FLOPS_PER_OPTION) / par_stats.mean / 1e9,
+            gpu_gflops: (size as f64 * FLOPS_PER_OPTION) / gpu_stats_computed.mean / 1e9,
+            renoir_seq_stats: Some(seq_stats),
+            renoir_par_stats: Some(par_stats),
+            gpu_stats: Some(gpu_stats_computed),
             cpu_seq_compute_s: None,
             cpu_par_compute_s: None,
             gpu_compute_s: None,
@@ -359,11 +398,9 @@ fn main() {
             speedup_parallel: speedup_par,
             speedup_seq_compute: None,
             speedup_par_compute: None,
-            renoir_seq_gflops: (size as f64 * FLOPS_PER_OPTION) / cpu_seq.duration_s / 1e9,
-            renoir_par_gflops: (size as f64 * FLOPS_PER_OPTION) / cpu_par.duration_s / 1e9,
-            gpu_gflops: (size as f64 * FLOPS_PER_OPTION) / gpu.duration_s / 1e9,
             cpu_workers: workers,
             batch_size: GPU_BATCH_SIZE,
+            num_runs,
             validation_passed: valid_passed,
             validation_max_error: max_err,
             validation_avg_error: avg_err,
@@ -384,6 +421,8 @@ fn main() {
             total_tests: sizes.len(),
             cpu_workers: workers,
             batch_size: GPU_BATCH_SIZE,
+            num_runs,
+            warmup_runs: WARMUP_RUNS,
             results: results.clone(),
         };
         save_json(&json_path, &intermediate_report);
@@ -405,6 +444,8 @@ fn main() {
         total_tests: sizes.len(),
         cpu_workers: workers,
         batch_size: GPU_BATCH_SIZE,
+        num_runs,
+        warmup_runs: WARMUP_RUNS,
         results,
     };
     save_json(&json_path, &final_report);

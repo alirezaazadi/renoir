@@ -188,6 +188,12 @@ def build_config_description(results, metadata):
         lines.append(f"Vec: {vectorization}")
         lines.append(f"Batch: {format_number(gpu_batch)}")
 
+    # Multi-run info
+    num_runs = metadata.get("num_runs", 1)
+    warmup_runs = metadata.get("warmup_runs", 0)
+    if num_runs > 1 or warmup_runs > 0:
+        lines.append(f"Runs: {num_runs} (+{warmup_runs} warmup)")
+
     # Benchmark load
     lines.append(f"Sizes: {format_number(min_items)}\u2013{format_number(max_items)}")
     lines.append(f"Tests: {len(results)}")
@@ -265,17 +271,38 @@ def plot_standard_results(results, metadata, source_name: str, output_dir: Path,
         fontweight="bold",
     )
 
+    # Extract stddev from RunStats if available
+    def get_stddev(r, stats_field):
+        stats = r.get(stats_field)
+        if stats and isinstance(stats, dict):
+            return stats.get("stddev", 0)
+        return 0
+
+    cpu_stddevs = [get_stddev(r, "renoir_seq_stats") for r in results]
+    par_stddevs = [get_stddev(r, "renoir_par_stats") for r in results]
+    gpu_stddevs = [get_stddev(r, "gpu_stats") for r in results]
+    has_errorbars = any(s > 0 for s in cpu_stddevs + par_stddevs + gpu_stddevs)
+
     # Chart 1: Execution Time Comparison
     ax1 = plt.subplot(2, 3, 1)
-    ax1.loglog(items_counts, cpu_times, "o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
-    ax1.loglog(items_counts, renoir_times, "s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
-    ax1.loglog(items_counts, gpu_times, "^-", label="GPU", color="tab:red", markersize=5, alpha=0.7)
+    if has_errorbars:
+        ax1.errorbar(items_counts, cpu_times, yerr=cpu_stddevs, fmt="o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7, capsize=3, capthick=1)
+        ax1.errorbar(items_counts, renoir_times, yerr=par_stddevs, fmt="s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7, capsize=3, capthick=1)
+        ax1.errorbar(items_counts, gpu_times, yerr=gpu_stddevs, fmt="^-", label="GPU", color="tab:red", markersize=5, alpha=0.7, capsize=3, capthick=1)
+    else:
+        ax1.loglog(items_counts, cpu_times, "o-", label="CPU Sequential", color="tab:blue", markersize=5, alpha=0.7)
+        ax1.loglog(items_counts, renoir_times, "s-", label="CPU Parallel", color="tab:green", markersize=5, alpha=0.7)
+        ax1.loglog(items_counts, gpu_times, "^-", label="GPU", color="tab:red", markersize=5, alpha=0.7)
     if has_gpu_simple:
         ax1.loglog(items_counts, gpu_simple_times, "d-", label="GPU Simple", color="tab:orange", markersize=5, alpha=0.7)
+    ax1.set_xscale("log")
+    ax1.set_yscale("log")
     ax1.set_xlabel("Number of Options")
     ax1.set_ylabel("Execution Time (s)")
+    num_runs = metadata.get("num_runs", 1)
+    title_suffix = f" (mean±σ, n={num_runs})" if num_runs > 1 else ""
     ax1.legend(loc="upper left", fontsize=7)
-    ax1.set_title("Execution Time vs Problem Size", fontweight="bold")
+    ax1.set_title(f"Execution Time vs Problem Size{title_suffix}", fontweight="bold")
     ax1.grid(True, alpha=0.3, which="both")
 
     # Chart 2: Speedup vs Problem Size

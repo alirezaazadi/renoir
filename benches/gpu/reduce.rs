@@ -40,9 +40,10 @@ use serde::{Deserialize, Serialize};
 
 mod common;
 use common::{
-    format_duration, format_number, format_number_short, format_speedup,
-    get_benchmark_filepath, get_benchmark_test_sizes, get_platform_info,
-    run_plotter, save_json, BenchmarkType, SystemConfig,
+    compute_stats, format_duration_with_stddev, format_number, format_number_short,
+    format_speedup, get_benchmark_filepath, get_benchmark_test_sizes, get_platform_info,
+    parse_num_runs_env, run_plotter, save_json, BenchmarkType, RunStats, SystemConfig,
+    WARMUP_RUNS,
 };
 
 #[cfg(any(feature = "gpu-wgpu", feature = "gpu-cuda"))]
@@ -109,14 +110,21 @@ struct ReduceTestResult {
     pub operator: ReduceOp,
     pub items_count: usize,
     pub data_size_gb: f64,
-    // Timing
+    // Timing (mean across runs)
     pub renoir_seq_total_time_s: f64,
     pub renoir_par_total_time_s: f64,
     pub gpu_total_time_s: f64,
-    // Speedups
+    // Multi-run statistics
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renoir_seq_stats: Option<RunStats>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renoir_par_stats: Option<RunStats>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_stats: Option<RunStats>,
+    // Speedups (based on mean times)
     pub speedup_seq: f64,
     pub speedup_par: f64,
-    // GFLOPS
+    // GFLOPS (based on mean times)
     pub renoir_seq_gflops: f64,
     pub renoir_par_gflops: f64,
     pub gpu_gflops: f64,
@@ -125,7 +133,9 @@ struct ReduceTestResult {
     pub gpu_threads: usize,
     pub batch_size: usize,
     pub tile_size: usize,
-    // Values
+    #[serde(default = "default_num_runs")]
+    pub num_runs: usize,
+    // Values (from last run)
     pub cpu_result: f64,
     pub renoir_result: f64,
     pub gpu_result: f64,
@@ -145,8 +155,14 @@ struct ReduceBenchmarkReport {
     pub cpu_workers: usize,
     pub batch_size: usize,
     pub tile_size: usize,
+    #[serde(default = "default_num_runs")]
+    pub num_runs: usize,
+    #[serde(default)]
+    pub warmup_runs: usize,
     pub results: Vec<ReduceTestResult>,
 }
+
+fn default_num_runs() -> usize { 1 }
 
 // ============================================================================
 // Data Generation
@@ -313,6 +329,7 @@ fn main() {
     let num_workers = std::thread::available_parallelism()
         .map(|p| p.get())
         .unwrap_or(4);
+    let num_runs = parse_num_runs_env();
 
     let operators = [
         ReduceOp::Sum,
@@ -323,7 +340,7 @@ fn main() {
 
     let gpu_enabled = cfg!(any(feature = "gpu-wgpu", feature = "gpu-cuda"));
 
-    // ── Header ──────────────────────────────────────────────────────────
+    // ── Header ──────────────────────────────────────────────────────────────────
     println!("╔════════════════════════════════════════════════════════════════╗");
     println!("║         GPU Reduce Benchmark: CPU vs GPU Comparison          ║");
     println!("╚════════════════════════════════════════════════════════════════╝");
@@ -333,6 +350,7 @@ fn main() {
     println!("  GPU Enabled:    {}", gpu_enabled);
     println!("  GPU Batch Size: {}", format_number(GPU_BATCH_SIZE));
     println!("  GPU Tile Size:  {}", format_number(GPU_TILE_SIZE));
+    println!("  Runs/Test:      {} (+ {} warmup)", num_runs, WARMUP_RUNS);
     println!(
         "  Test Sizes:     {} sizes from {} to {}",
         test_sizes.len(),
@@ -355,12 +373,12 @@ fn main() {
     let mut all_results: Vec<ReduceTestResult> = Vec::new();
     let mut test_id: usize = 0;
 
-    // ── Table header ────────────────────────────────────────────────────
+    // ── Table header ────────────────────────────────────────────────────────────
     println!(
-        "{:>5} {:>5} {:>14} {:>8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>7}",
-        "Test", "Op", "Items", "DataGB", "Seq(s)", "Par(s)", "GPU(s)", "Seq/GPU", "Par/GPU", "Valid"
+        "{:>5} {:>5} {:>14} {:>8} {:>4} {:>16} {:>16} {:>16} {:>8} {:>8} {:>7}",
+        "Test", "Op", "Items", "DataGB", "Runs", "Seq (mean±σ)", "Par (mean±σ)", "GPU (mean±σ)", "Seq/GPU", "Par/GPU", "Valid"
     );
-    println!("{}", "-".repeat(100));
+    println!("{}", "-".repeat(130));
 
     for &num_items in &test_sizes {
         for &op in &operators {
@@ -371,31 +389,66 @@ fn main() {
             let data_size_gb = calculate_data_size_gb(num_items);
             let expected = calculate_expected(&data, op);
 
-            // 1. CPU sequential
-            let (cpu_result, cpu_time) = benchmark_cpu_sequential(&data, op);
+            // --- Multi-run CPU Sequential ---
+            let mut seq_durations = Vec::with_capacity(num_runs);
+            let mut last_cpu_result = 0.0f64;
+            // Warmup
+            for _ in 0..WARMUP_RUNS {
+                let (r, _) = benchmark_cpu_sequential(&data, op);
+                last_cpu_result = r;
+            }
+            for _ in 0..num_runs {
+                let (r, t) = benchmark_cpu_sequential(&data, op);
+                seq_durations.push(t);
+                last_cpu_result = r;
+            }
+            let seq_stats = compute_stats(&seq_durations);
 
-            // 2. Renoir parallel
-            let (renoir_result, renoir_time) = benchmark_renoir_parallel(&data, op, num_workers);
+            // --- Multi-run Renoir Parallel ---
+            let mut par_durations = Vec::with_capacity(num_runs);
+            let mut last_renoir_result = 0.0f64;
+            // Warmup
+            for _ in 0..WARMUP_RUNS {
+                let (r, _) = benchmark_renoir_parallel(&data, op, num_workers);
+                last_renoir_result = r;
+            }
+            for _ in 0..num_runs {
+                let (r, t) = benchmark_renoir_parallel(&data, op, num_workers);
+                par_durations.push(t);
+                last_renoir_result = r;
+            }
+            let par_stats = compute_stats(&par_durations);
 
-            // 3. GPU
-            let (gpu_result, gpu_time) =
-                benchmark_gpu_reduce(&data, op, GPU_BATCH_SIZE, GPU_TILE_SIZE);
+            // --- Multi-run GPU ---
+            let mut gpu_durations = Vec::with_capacity(num_runs);
+            let mut last_gpu_result = 0.0f64;
+            // Warmup
+            for _ in 0..WARMUP_RUNS {
+                let (r, _) = benchmark_gpu_reduce(&data, op, GPU_BATCH_SIZE, GPU_TILE_SIZE);
+                last_gpu_result = r;
+            }
+            for _ in 0..num_runs {
+                let (r, t) = benchmark_gpu_reduce(&data, op, GPU_BATCH_SIZE, GPU_TILE_SIZE);
+                gpu_durations.push(t);
+                last_gpu_result = r;
+            }
+            let gpu_stats_computed = compute_stats(&gpu_durations);
 
-            // Speedups
-            let speedup_seq = if gpu_time > 0.0 {
-                cpu_time / gpu_time
+            // Speedups from mean times
+            let speedup_seq = if gpu_stats_computed.mean > 0.0 {
+                seq_stats.mean / gpu_stats_computed.mean
             } else {
                 1.0
             };
-            let speedup_par = if gpu_time > 0.0 {
-                renoir_time / gpu_time
+            let speedup_par = if gpu_stats_computed.mean > 0.0 {
+                par_stats.mean / gpu_stats_computed.mean
             } else {
                 1.0
             };
 
             // Validation (against GPU result when GPU is enabled)
             let (validation_passed, error_margin) = if gpu_enabled {
-                validate_result(expected, gpu_result, op)
+                validate_result(expected, last_gpu_result, op)
             } else {
                 (true, 0.0)
             };
@@ -403,14 +456,15 @@ fn main() {
             let valid_str = if validation_passed { "  ✓  " } else { "  ✗  " };
 
             println!(
-                "{:>5} {:>5} {:>14} {:>8.3} {:>10} {:>10} {:>10} {:>8} {:>8} {:>7}",
+                "{:>5} {:>5} {:>14} {:>8.3} {:>4} {:>16} {:>16} {:>16} {:>8} {:>8} {:>7}",
                 test_id,
                 op,
                 format_number(num_items),
                 data_size_gb,
-                format_duration(cpu_time),
-                format_duration(renoir_time),
-                format_duration(gpu_time),
+                num_runs,
+                format_duration_with_stddev(seq_stats.mean, seq_stats.stddev),
+                format_duration_with_stddev(par_stats.mean, par_stats.stddev),
+                format_duration_with_stddev(gpu_stats_computed.mean, gpu_stats_computed.stddev),
                 format_speedup(speedup_seq),
                 format_speedup(speedup_par),
                 valid_str
@@ -423,21 +477,25 @@ fn main() {
                 operator: op,
                 items_count: num_items,
                 data_size_gb,
-                renoir_seq_total_time_s: cpu_time,
-                renoir_par_total_time_s: renoir_time,
-                gpu_total_time_s: gpu_time,
+                renoir_seq_total_time_s: seq_stats.mean,
+                renoir_par_total_time_s: par_stats.mean,
+                gpu_total_time_s: gpu_stats_computed.mean,
+                renoir_seq_gflops: calculate_gflops(num_items, seq_stats.mean),
+                renoir_par_gflops: calculate_gflops(num_items, par_stats.mean),
+                gpu_gflops: calculate_gflops(num_items, gpu_stats_computed.mean),
+                renoir_seq_stats: Some(seq_stats),
+                renoir_par_stats: Some(par_stats),
+                gpu_stats: Some(gpu_stats_computed),
                 speedup_seq,
                 speedup_par,
-                renoir_seq_gflops: calculate_gflops(num_items, cpu_time),
-                renoir_par_gflops: calculate_gflops(num_items, renoir_time),
-                gpu_gflops: calculate_gflops(num_items, gpu_time),
                 cpu_workers: num_workers,
                 gpu_threads: GPU_THREADS_ESTIMATE,
                 batch_size: GPU_BATCH_SIZE,
                 tile_size: GPU_TILE_SIZE,
-                cpu_result,
-                renoir_result,
-                gpu_result,
+                num_runs,
+                cpu_result: last_cpu_result,
+                renoir_result: last_renoir_result,
+                gpu_result: last_gpu_result,
                 validation_passed,
                 error_margin,
             };
@@ -455,15 +513,17 @@ fn main() {
                 cpu_workers: num_workers,
                 batch_size: GPU_BATCH_SIZE,
                 tile_size: GPU_TILE_SIZE,
+                num_runs,
+                warmup_runs: WARMUP_RUNS,
                 results: all_results.clone(),
             };
             save_json(&json_path, &report);
         }
     }
 
-    println!("{}", "-".repeat(100));
+    println!("{}", "-".repeat(130));
 
-    // ── Final save ──────────────────────────────────────────────────────
+    // ── Final save ──────────────────────────────────────────────────────────────
     let report = ReduceBenchmarkReport {
         benchmark_type: "reduce".to_string(),
         start_time: timestamp.to_rfc3339(),
@@ -474,15 +534,17 @@ fn main() {
         cpu_workers: num_workers,
         batch_size: GPU_BATCH_SIZE,
         tile_size: GPU_TILE_SIZE,
+        num_runs,
+        warmup_runs: WARMUP_RUNS,
         results: all_results.clone(),
     };
     save_json(&json_path, &report);
     println!("\nResults saved to: {}", json_path.display());
 
-    // ── Generate plots ──────────────────────────────────────────────────
+    // ── Generate plots ──────────────────────────────────────────────────────────
     run_plotter(&json_path, BenchmarkType::Reduce, &timestamp);
 
-    // ── Print summary ───────────────────────────────────────────────────
+    // ── Print summary ───────────────────────────────────────────────────────────
     print_summary(&all_results, num_workers);
 }
 

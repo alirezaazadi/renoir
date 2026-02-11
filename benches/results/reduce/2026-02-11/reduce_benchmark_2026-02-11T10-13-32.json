@@ -1,0 +1,270 @@
+{
+  "benchmark_type": "reduce",
+  "start_time": "2026-02-11T10:13:32.751211+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 11,
+    "ram_gb": 18.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M3 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 1,
+    "gpu_batch_size": 4000000,
+    "gpu_threads": 16384
+  },
+  "gpu_enabled": true,
+  "total_tests": 4,
+  "cpu_workers": 11,
+  "batch_size": 4000000,
+  "tile_size": 262144,
+  "num_runs": 2,
+  "warmup_runs": 1,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-02-11T10:13:33.220093+00:00",
+      "operator": "sum",
+      "items_count": 10000,
+      "data_size_gb": 0.00003725290298461914,
+      "renoir_seq_total_time_s": 7.583e-6,
+      "renoir_par_total_time_s": 0.000232208,
+      "gpu_total_time_s": 0.0006844374999999999,
+      "renoir_seq_stats": {
+        "mean": 7.583e-6,
+        "stddev": 1.767766952966364e-7,
+        "min": 7.458e-6,
+        "max": 7.708e-6,
+        "median": 7.583e-6,
+        "runs": [
+          7.708e-6,
+          7.458e-6
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.000232208,
+        "stddev": 0.00001803122292025694,
+        "min": 0.000219458,
+        "max": 0.000244958,
+        "median": 0.000232208,
+        "runs": [
+          0.000244958,
+          0.000219458
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.0006844374999999999,
+        "stddev": 0.000102559474650078,
+        "min": 0.000611917,
+        "max": 0.000756958,
+        "median": 0.0006844374999999999,
+        "runs": [
+          0.000756958,
+          0.000611917
+        ],
+        "num_runs": 2
+      },
+      "speedup_seq": 0.01107917085197699,
+      "speedup_par": 0.33926837731714,
+      "renoir_seq_gflops": 1.3186074113147832,
+      "renoir_par_gflops": 0.043060531936884174,
+      "gpu_gflops": 0.014609076796639578,
+      "cpu_workers": 11,
+      "gpu_threads": 16384,
+      "batch_size": 4000000,
+      "tile_size": 262144,
+      "num_runs": 2,
+      "cpu_result": 505340.96426951885,
+      "renoir_result": 505340.96426951885,
+      "gpu_result": 505340.96875,
+      "validation_passed": true,
+      "error_margin": 8.866253608081713e-9
+    },
+    {
+      "test_id": 2,
+      "timestamp": "2026-02-11T10:13:33.339273+00:00",
+      "operator": "product",
+      "items_count": 10000,
+      "data_size_gb": 0.00003725290298461914,
+      "renoir_seq_total_time_s": 0.000011167,
+      "renoir_par_total_time_s": 0.00020968700000000001,
+      "gpu_total_time_s": 0.000650979,
+      "renoir_seq_stats": {
+        "mean": 0.000011167,
+        "stddev": 0.0,
+        "min": 0.000011167,
+        "max": 0.000011167,
+        "median": 0.000011167,
+        "runs": [
+          0.000011167,
+          0.000011167
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.00020968700000000001,
+        "stddev": 0.00002383515538023614,
+        "min": 0.000192833,
+        "max": 0.000226541,
+        "median": 0.00020968700000000001,
+        "runs": [
+          0.000226541,
+          0.000192833
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.000650979,
+        "stddev": 1.9148451634531147e-6,
+        "min": 0.000649625,
+        "max": 0.000652333,
+        "median": 0.000650979,
+        "runs": [
+          0.000652333,
+          0.000649625
+        ],
+        "num_runs": 2
+      },
+      "speedup_seq": 0.017154163191132128,
+      "speedup_par": 0.3221102370429768,
+      "renoir_seq_gflops": 0.8954061072803796,
+      "renoir_par_gflops": 0.04768535960741486,
+      "gpu_gflops": 0.015359942486623993,
+      "cpu_workers": 11,
+      "gpu_threads": 16384,
+      "batch_size": 4000000,
+      "tile_size": 262144,
+      "num_runs": 2,
+      "cpu_result": 0.9049610950588847,
+      "renoir_result": 0.9049610950588856,
+      "gpu_result": 0.9049589037895203,
+      "validation_passed": true,
+      "error_margin": 2.4213962084876238e-6
+    },
+    {
+      "test_id": 3,
+      "timestamp": "2026-02-11T10:13:33.364946+00:00",
+      "operator": "min",
+      "items_count": 10000,
+      "data_size_gb": 0.00003725290298461914,
+      "renoir_seq_total_time_s": 1.3335e-6,
+      "renoir_par_total_time_s": 0.0002601875,
+      "gpu_total_time_s": 0.00042902099999999997,
+      "renoir_seq_stats": {
+        "mean": 1.3335e-6,
+        "stddev": 1.1808683245815332e-7,
+        "min": 1.25e-6,
+        "max": 1.417e-6,
+        "median": 1.3335e-6,
+        "runs": [
+          1.417e-6,
+          1.25e-6
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.0002601875,
+        "stddev": 0.000018826718049091797,
+        "min": 0.000246875,
+        "max": 0.0002735,
+        "median": 0.0002601875,
+        "runs": [
+          0.0002735,
+          0.000246875
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.00042902099999999997,
+        "stddev": 0.00012400814464380954,
+        "min": 0.000341334,
+        "max": 0.000516708,
+        "median": 0.00042902099999999997,
+        "runs": [
+          0.000516708,
+          0.000341334
+        ],
+        "num_runs": 2
+      },
+      "speedup_seq": 0.0031082394568098066,
+      "speedup_par": 0.606467981753807,
+      "renoir_seq_gflops": 7.498312710911136,
+      "renoir_par_gflops": 0.03842997838097526,
+      "gpu_gflops": 0.0233065514275525,
+      "cpu_workers": 11,
+      "gpu_threads": 16384,
+      "batch_size": 4000000,
+      "tile_size": 262144,
+      "num_runs": 2,
+      "cpu_result": 1.0092377662658691,
+      "renoir_result": 1.0092377662658691,
+      "gpu_result": 1.0092377662658691,
+      "validation_passed": true,
+      "error_margin": 0.0
+    },
+    {
+      "test_id": 4,
+      "timestamp": "2026-02-11T10:13:33.391318+00:00",
+      "operator": "max",
+      "items_count": 10000,
+      "data_size_gb": 0.00003725290298461914,
+      "renoir_seq_total_time_s": 3.7505e-6,
+      "renoir_par_total_time_s": 0.000361083,
+      "gpu_total_time_s": 0.0012605210000000001,
+      "renoir_seq_stats": {
+        "mean": 3.7505e-6,
+        "stddev": 1.1808683245815363e-7,
+        "min": 3.667e-6,
+        "max": 3.834e-6,
+        "median": 3.7505e-6,
+        "runs": [
+          3.834e-6,
+          3.667e-6
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.000361083,
+        "stddev": 0.000019504833452249715,
+        "min": 0.000347291,
+        "max": 0.000374875,
+        "median": 0.000361083,
+        "runs": [
+          0.000374875,
+          0.000347291
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.0012605210000000001,
+        "stddev": 0.0007001233946155491,
+        "min": 0.000765459,
+        "max": 0.001755583,
+        "median": 0.0012605210000000001,
+        "runs": [
+          0.001755583,
+          0.000765459
+        ],
+        "num_runs": 2
+      },
+      "speedup_seq": 0.002975357015075512,
+      "speedup_par": 0.28645536250486897,
+      "renoir_seq_gflops": 2.666044527396347,
+      "renoir_par_gflops": 0.02769169415342179,
+      "gpu_gflops": 0.0079324342870924,
+      "cpu_workers": 11,
+      "gpu_threads": 16384,
+      "batch_size": 4000000,
+      "tile_size": 262144,
+      "num_runs": 2,
+      "cpu_result": 99.99580383300781,
+      "renoir_result": 99.99580383300781,
+      "gpu_result": 99.99580383300781,
+      "validation_passed": true,
+      "error_margin": 0.0
+    }
+  ]
+}

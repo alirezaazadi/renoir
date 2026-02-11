@@ -150,6 +150,13 @@ def build_metadata_text(results, metadata):
     parts.append(f"GPU Threads: {format_number(gpu_threads)}")
     parts.append(f"Batch: {format_number(batch_size)}")
     parts.append(f"Tile: {format_number(tile_size)}")
+
+    # Multi-run info
+    num_runs = metadata.get("num_runs", 1)
+    warmup_runs = metadata.get("warmup_runs", 0)
+    if num_runs > 1 or warmup_runs > 0:
+        parts.append(f"Runs: {num_runs} (+{warmup_runs} warmup)")
+
     parts.append(f"Sizes: {format_number(min_items)}\u2013{format_number(max_items)}")
     parts.append(f"Ops: {', '.join(operators)}")
     parts.append(f"Tests: {total_tests}")
@@ -204,6 +211,20 @@ def plot_reduce_results(results, metadata, source_name, output_dir):
         fontweight="bold",
     )
 
+    # Helper to extract stddev from RunStats
+    def get_stddev(r, stats_field):
+        stats = r.get(stats_field)
+        if stats and isinstance(stats, dict):
+            return stats.get("stddev", 0)
+        return 0
+
+    has_errorbars = any(
+        get_stddev(r, f) > 0
+        for r in results
+        for f in ("renoir_seq_stats", "renoir_par_stats", "gpu_stats")
+    )
+    num_runs = metadata.get("num_runs", 1)
+
     # ── Chart 1: Execution Time (log-log) ────────────────────────────────
     ax1 = plt.subplot(2, 3, 1)
     for op_name in all_ops:
@@ -211,16 +232,40 @@ def plot_reduce_results(results, metadata, source_name, output_dir):
         sizes = [r["items_count"] for r in op_results]
         color = OPERATOR_COLORS.get(op_name, "gray")
 
-        ax1.loglog(sizes,
-                   [r["renoir_seq_total_time_s"] for r in op_results],
-                   "o--", color=color, alpha=0.35, markersize=3, linewidth=1)
-        ax1.loglog(sizes,
-                   [r["renoir_par_total_time_s"] for r in op_results],
-                   "s--", color=color, alpha=0.35, markersize=3, linewidth=1)
-        ax1.loglog(sizes,
-                   [r["gpu_total_time_s"] for r in op_results],
-                   "^-", color=color, alpha=0.8, markersize=4, linewidth=1.5,
-                   label=f"GPU {op_name}")
+        if has_errorbars:
+            seq_sd = [get_stddev(r, "renoir_seq_stats") for r in op_results]
+            par_sd = [get_stddev(r, "renoir_par_stats") for r in op_results]
+            gpu_sd = [get_stddev(r, "gpu_stats") for r in op_results]
+            ax1.errorbar(sizes,
+                         [r["renoir_seq_total_time_s"] for r in op_results],
+                         yerr=seq_sd,
+                         fmt="o--", color=color, alpha=0.35, markersize=3, linewidth=1,
+                         capsize=2, capthick=0.5)
+            ax1.errorbar(sizes,
+                         [r["renoir_par_total_time_s"] for r in op_results],
+                         yerr=par_sd,
+                         fmt="s--", color=color, alpha=0.35, markersize=3, linewidth=1,
+                         capsize=2, capthick=0.5)
+            ax1.errorbar(sizes,
+                         [r["gpu_total_time_s"] for r in op_results],
+                         yerr=gpu_sd,
+                         fmt="^-", color=color, alpha=0.8, markersize=4, linewidth=1.5,
+                         capsize=2, capthick=0.5,
+                         label=f"GPU {op_name}")
+        else:
+            ax1.loglog(sizes,
+                       [r["renoir_seq_total_time_s"] for r in op_results],
+                       "o--", color=color, alpha=0.35, markersize=3, linewidth=1)
+            ax1.loglog(sizes,
+                       [r["renoir_par_total_time_s"] for r in op_results],
+                       "s--", color=color, alpha=0.35, markersize=3, linewidth=1)
+            ax1.loglog(sizes,
+                       [r["gpu_total_time_s"] for r in op_results],
+                       "^-", color=color, alpha=0.8, markersize=4, linewidth=1.5,
+                       label=f"GPU {op_name}")
+
+    ax1.set_xscale("log")
+    ax1.set_yscale("log")
 
     # Add legend proxy for strategy
     from matplotlib.lines import Line2D
@@ -237,7 +282,8 @@ def plot_reduce_results(results, metadata, source_name, output_dir):
     ], loc="upper left", fontsize=6, ncol=2)
     ax1.set_xlabel("Number of Elements")
     ax1.set_ylabel("Execution Time (s)")
-    ax1.set_title("Execution Time vs Problem Size", fontweight="bold")
+    title_suffix = f" (mean±σ, n={num_runs})" if num_runs > 1 else ""
+    ax1.set_title(f"Execution Time vs Problem Size{title_suffix}", fontweight="bold")
     ax1.grid(True, alpha=0.3, which="both")
 
     # ── Chart 2: GPU Speedup ─────────────────────────────────────────────

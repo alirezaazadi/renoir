@@ -1,0 +1,81 @@
+{
+  "benchmark_type": "black_scholes",
+  "start_time": "2026-02-11T10:10:20.174168+00:00",
+  "platform": "macos aarch64 WGPU",
+  "system_config": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu_cores": 11,
+    "ram_gb": 18.0,
+    "gpu_backend": "WGPU",
+    "gpu_device": "Apple M3 Pro",
+    "gpu_vram_gb": null,
+    "vectorization_factor": 4,
+    "gpu_batch_size": 5000000,
+    "gpu_threads": 16384
+  },
+  "total_tests": 1,
+  "cpu_workers": 11,
+  "batch_size": 5000000,
+  "num_runs": 2,
+  "warmup_runs": 1,
+  "results": [
+    {
+      "test_id": 1,
+      "timestamp": "2026-02-11T10:10:20.576285+00:00",
+      "items_count": 10000,
+      "data_size_gb": 0.0001862645149230957,
+      "renoir_seq_total_time_s": 0.0005396455,
+      "renoir_par_total_time_s": 0.000341125,
+      "gpu_total_time_s": 0.0013420419999999999,
+      "renoir_seq_stats": {
+        "mean": 0.0005396455,
+        "stddev": 9.811106588963346e-6,
+        "min": 0.000532708,
+        "max": 0.000546583,
+        "median": 0.0005396455,
+        "runs": [
+          0.000532708,
+          0.000546583
+        ],
+        "num_runs": 2
+      },
+      "renoir_par_stats": {
+        "mean": 0.000341125,
+        "stddev": 8.662058069535206e-6,
+        "min": 0.000335,
+        "max": 0.00034725,
+        "median": 0.000341125,
+        "runs": [
+          0.00034725,
+          0.000335
+        ],
+        "num_runs": 2
+      },
+      "gpu_stats": {
+        "mean": 0.0013420419999999999,
+        "stddev": 0.00018349420971790906,
+        "min": 0.001212292,
+        "max": 0.001471792,
+        "median": 0.0013420419999999999,
+        "runs": [
+          0.001471792,
+          0.001212292
+        ],
+        "num_runs": 2
+      },
+      "speedup": 0.4021077581774639,
+      "speedup_parallel": 0.254183550142246,
+      "renoir_seq_gflops": 0.7412273427648336,
+      "renoir_par_gflops": 1.1725906925613778,
+      "gpu_gflops": 0.29805326509900587,
+      "cpu_workers": 11,
+      "batch_size": 5000000,
+      "num_runs": 2,
+      "validation_passed": true,
+      "validation_max_error": 0.00003147125244140625,
+      "validation_avg_error": 3.1533993478660705e-6,
+      "validation_sample_size": 10000
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 //!
 //! Shared utilities for all GPU benchmarks (Black-Scholes, Monte Carlo, etc.):
 //! - Benchmark type definitions
+//! - Multi-run statistical benchmarking (mean, stddev, min, max, median)
 //! - Test size generation
 //! - Results persistence with organized folder structure
 //! - Filename generation with ISO timestamps
@@ -13,6 +14,120 @@ use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
+
+// ============================================================================
+// Multi-Run Benchmark Statistics
+// ============================================================================
+
+/// Default number of benchmark runs per test size.
+pub const DEFAULT_NUM_RUNS: usize = 5;
+
+/// Number of warmup runs before collecting measurements.
+pub const WARMUP_RUNS: usize = 1;
+
+/// Parse BENCH_RUNS from environment variable.
+///
+/// Returns the configured number of runs, or `DEFAULT_NUM_RUNS` if not set.
+pub fn parse_num_runs_env() -> usize {
+    env::var("BENCH_RUNS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_NUM_RUNS)
+}
+
+/// Statistics from multiple benchmark runs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunStats {
+    /// Mean duration in seconds
+    pub mean: f64,
+    /// Standard deviation in seconds
+    pub stddev: f64,
+    /// Minimum duration in seconds
+    pub min: f64,
+    /// Maximum duration in seconds
+    pub max: f64,
+    /// Median duration in seconds
+    pub median: f64,
+    /// Individual run durations in seconds
+    pub runs: Vec<f64>,
+    /// Number of runs (excluding warmup)
+    pub num_runs: usize,
+}
+
+impl Default for RunStats {
+    fn default() -> Self {
+        Self {
+            mean: 0.0,
+            stddev: 0.0,
+            min: 0.0,
+            max: 0.0,
+            median: 0.0,
+            runs: Vec::new(),
+            num_runs: 0,
+        }
+    }
+}
+
+/// Compute statistics from a slice of duration measurements (in seconds).
+///
+/// # Arguments
+/// * `durations` - Slice of measured durations in seconds
+///
+/// # Returns
+/// A `RunStats` struct with computed mean, stddev, min, max, median.
+pub fn compute_stats(durations: &[f64]) -> RunStats {
+    let n = durations.len();
+    if n == 0 {
+        return RunStats::default();
+    }
+
+    let mean = durations.iter().sum::<f64>() / n as f64;
+    let variance = if n > 1 {
+        durations.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1) as f64
+    } else {
+        0.0
+    };
+    let stddev = variance.sqrt();
+    let min = durations.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = durations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    let mut sorted = durations.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let median = if n % 2 == 0 {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+    } else {
+        sorted[n / 2]
+    };
+
+    RunStats {
+        mean,
+        stddev,
+        min,
+        max,
+        median,
+        runs: durations.to_vec(),
+        num_runs: n,
+    }
+}
+
+/// Format duration showing mean ± stddev for table display.
+///
+/// # Examples
+/// ```ignore
+/// // With 3 runs: "  1.234s ± 0.05"
+/// assert!(format_duration_with_stddev(1.234, 0.05).contains("±"));
+/// ```
+pub fn format_duration_with_stddev(mean_secs: f64, stddev_secs: f64) -> String {
+    if mean_secs >= 10.0 {
+        format!("{:>6.2}s±{:.2}", mean_secs, stddev_secs)
+    } else if mean_secs >= 1.0 {
+        format!("{:>6.3}s±{:.3}", mean_secs, stddev_secs)
+    } else if mean_secs >= 0.001 {
+        format!("{:>6.1}ms±{:.1}", mean_secs * 1000.0, stddev_secs * 1000.0)
+    } else {
+        format!("{:>5.0}μs±{:.0}", mean_secs * 1_000_000.0, stddev_secs * 1_000_000.0)
+    }
+}
 
 // ============================================================================
 // Benchmark Test Sizes
@@ -157,6 +272,7 @@ pub fn format_number_short(n: usize) -> String {
 /// assert_eq!(format_duration(1.234), "   1.234s");
 /// assert_eq!(format_duration(0.0005), "   0.50ms");
 /// ```
+#[allow(dead_code)]
 pub fn format_duration(secs: f64) -> String {
     if secs >= 10.0 {
         format!("{:>8.2}s", secs)
@@ -488,10 +604,18 @@ pub struct TestResult {
     pub items_count: usize,
     pub data_size_gb: f64,
     
-    // Total timing results (in seconds) - includes data generation
-    pub renoir_seq_total_time_s: f64,   // Renoir Sequential (1 worker)
-    pub renoir_par_total_time_s: f64,   // Renoir Parallel (multi-worker)
-    pub gpu_total_time_s: f64,          // GPU
+    // Total timing results (in seconds) - mean across runs
+    pub renoir_seq_total_time_s: f64,   // Renoir Sequential (1 worker) - mean
+    pub renoir_par_total_time_s: f64,   // Renoir Parallel (multi-worker) - mean
+    pub gpu_total_time_s: f64,          // GPU - mean
+    
+    // Multi-run statistics per strategy
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renoir_seq_stats: Option<RunStats>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renoir_par_stats: Option<RunStats>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_stats: Option<RunStats>,
     
     // Compute-only timing (excludes data generation overhead) - Optional
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -501,7 +625,7 @@ pub struct TestResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_compute_s: Option<f64>,
     
-    // Speedup ratios (total time)
+    // Speedup ratios (total time, based on means)
     pub speedup: f64,               // GPU vs CPU Sequential
     pub speedup_parallel: f64,      // GPU vs CPU Parallel
     
@@ -511,7 +635,7 @@ pub struct TestResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speedup_par_compute: Option<f64>,
     
-    // GFLOPS
+    // GFLOPS (based on mean times)
     pub renoir_seq_gflops: f64,     // Renoir Sequential
     pub renoir_par_gflops: f64,     // Renoir Parallel
     pub gpu_gflops: f64,            // GPU
@@ -519,6 +643,8 @@ pub struct TestResult {
     // Configuration
     pub cpu_workers: usize,
     pub batch_size: usize,
+    #[serde(default = "default_num_runs")]
+    pub num_runs: usize,
     
     // Validation
     pub validation_passed: bool,
@@ -548,6 +674,10 @@ pub struct BenchmarkReport {
     pub total_tests: usize,
     pub cpu_workers: usize,
     pub batch_size: usize,
+    #[serde(default = "default_num_runs")]
+    pub num_runs: usize,
+    #[serde(default)]
+    pub warmup_runs: usize,
     pub results: Vec<TestResult>,
     
     // Benchmark-specific configuration (optional)
@@ -555,3 +685,4 @@ pub struct BenchmarkReport {
     pub monte_carlo_config: Option<MonteCarloConfig>,
 }
 
+fn default_num_runs() -> usize { 1 }
